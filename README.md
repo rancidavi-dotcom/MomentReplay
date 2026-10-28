@@ -1,4 +1,4 @@
-# Medal para Linux — projeto de reimplementação independente
+# MomentReplay — aplicativo nativo de captura para Linux
 
 ## Objetivo
 
