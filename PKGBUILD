@@ -20,7 +20,7 @@ build() {
     cmake -S "$srcdir/$pkgname" -B build \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr \
-        -DBUILD_TESTING=OFF
+        -DBUILD_TESTING=ON
     cmake --build build
 }
 
