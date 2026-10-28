@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Moment
+Icon=io.moment.Moment
+Comment=Local instant replay and gameplay recording
+Exec=medal-linux
+Terminal=false
+Categories=AudioVideo;Recorder;
+StartupWMClass=Moment
