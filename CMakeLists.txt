@@ -33,6 +33,8 @@ qt_add_executable(medal-linux
     src/recording/global_shortcuts.h
     src/recording/recording_preferences.cpp
     src/recording/recording_preferences.h
+    src/recording/game_monitor.cpp
+    src/recording/game_monitor.h
     src/recording/wayland_screencast.cpp
     src/recording/wayland_screencast.h
 )
@@ -77,6 +79,7 @@ include(CTest)
 if(BUILD_TESTING)
     qt_add_executable(main-window-visual-test
         tests/main_window_visual_test.cpp
+        src/recording/game_monitor.cpp src/recording/game_monitor.h
         src/library/clip_repository.cpp src/library/clip_repository.h
         src/library/clip_library_model.cpp src/library/clip_library_model.h
         src/recording/screen_recorder.cpp src/recording/screen_recorder.h
@@ -181,6 +184,14 @@ if(BUILD_TESTING)
     )
     add_test(NAME recording-preferences-test COMMAND recording-preferences-test)
     set_tests_properties(recording-preferences-test PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    qt_add_executable(game-monitor-test
+        tests/game_monitor_test.cpp
+        src/recording/game_monitor.cpp
+        src/recording/game_monitor.h
+    )
+    target_link_libraries(game-monitor-test PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME game-monitor-test COMMAND game-monitor-test)
 
     qt_add_executable(instant-replay-test
         tests/instant_replay_test.cpp

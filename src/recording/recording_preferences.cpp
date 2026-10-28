@@ -55,9 +55,47 @@ QByteArray RecordingPreferences::audioInputId() const
     return m_audioInputId;
 }
 
+int RecordingPreferences::effectiveFrameRate() const
+{
+    return m_activeGameProfile.isEmpty() ? m_frameRate
+                                         : m_activeGameProfile.value(QStringLiteral("frameRate"), m_frameRate).toInt();
+}
+
+int RecordingPreferences::effectiveQuality() const
+{
+    return m_activeGameProfile.isEmpty() ? m_quality
+                                         : m_activeGameProfile.value(QStringLiteral("quality"), m_quality).toInt();
+}
+
+int RecordingPreferences::effectiveReplaySeconds() const
+{
+    return m_activeGameProfile.isEmpty() ? m_replaySeconds
+                                         : m_activeGameProfile.value(QStringLiteral("replaySeconds"), m_replaySeconds).toInt();
+}
+
+int RecordingPreferences::effectiveReplayClipSeconds() const
+{
+    return m_activeGameProfile.isEmpty() ? m_replayClipSeconds
+                                         : m_activeGameProfile.value(QStringLiteral("replayClipSeconds"), m_replayClipSeconds).toInt();
+}
+
+bool RecordingPreferences::effectiveCaptureAudio() const
+{
+    return m_activeGameProfile.isEmpty() ? m_captureAudio
+                                         : m_activeGameProfile.value(QStringLiteral("captureAudio"), m_captureAudio).toBool();
+}
+
 QString RecordingPreferences::settingsFilePath() const
 {
     return m_settings.fileName();
+}
+
+void RecordingPreferences::setActiveGameProfile(const QVariantMap &profile)
+{
+    if (m_activeGameProfile == profile)
+        return;
+    m_activeGameProfile = profile;
+    emit effectiveSettingsChanged();
 }
 
 void RecordingPreferences::setFrameRate(int value)
@@ -68,6 +106,7 @@ void RecordingPreferences::setFrameRate(int value)
     m_settings.setValue(QStringLiteral("recording/frameRate"), m_frameRate);
     m_settings.sync();
     emit frameRateChanged();
+    if (m_activeGameProfile.isEmpty()) emit effectiveSettingsChanged();
 }
 
 void RecordingPreferences::setQuality(int value)
@@ -78,6 +117,7 @@ void RecordingPreferences::setQuality(int value)
     m_settings.setValue(QStringLiteral("recording/quality"), m_quality);
     m_settings.sync();
     emit qualityChanged();
+    if (m_activeGameProfile.isEmpty()) emit effectiveSettingsChanged();
 }
 
 void RecordingPreferences::setReplaySeconds(int value)
@@ -88,6 +128,7 @@ void RecordingPreferences::setReplaySeconds(int value)
     m_settings.setValue(QStringLiteral("recording/replaySeconds"), m_replaySeconds);
     m_settings.sync();
     emit replaySecondsChanged();
+    if (m_activeGameProfile.isEmpty()) emit effectiveSettingsChanged();
 }
 
 void RecordingPreferences::setReplayClipSeconds(int value)
@@ -99,6 +140,7 @@ void RecordingPreferences::setReplayClipSeconds(int value)
     m_settings.setValue(QStringLiteral("recording/replayClipSeconds"), m_replayClipSeconds);
     m_settings.sync();
     emit replayClipSecondsChanged();
+    if (m_activeGameProfile.isEmpty()) emit effectiveSettingsChanged();
 }
 
 void RecordingPreferences::setCaptureAudio(bool value)
@@ -109,6 +151,7 @@ void RecordingPreferences::setCaptureAudio(bool value)
     m_settings.setValue(QStringLiteral("recording/captureAudio"), value);
     m_settings.sync();
     emit captureAudioChanged();
+    if (m_activeGameProfile.isEmpty()) emit effectiveSettingsChanged();
 }
 
 void RecordingPreferences::setAudioInputId(const QByteArray &value)

@@ -9,6 +9,7 @@ class RecordingPreferencesTest final : public QObject {
 private slots:
     void persistsSupportedValuesAcrossInstances();
     void rejectsUnsupportedValues();
+    void gameProfileOverridesDefaultsWithoutChangingThem();
 };
 
 void RecordingPreferencesTest::persistsSupportedValuesAcrossInstances()
@@ -63,6 +64,38 @@ void RecordingPreferencesTest::rejectsUnsupportedValues()
     QCOMPARE(qualitySpy.count(), 0);
     QCOMPARE(replaySpy.count(), 0);
     QCOMPARE(replayClipSpy.count(), 0);
+}
+
+void RecordingPreferencesTest::gameProfileOverridesDefaultsWithoutChangingThem()
+{
+    QTemporaryDir temporary;
+    QVERIFY(temporary.isValid());
+    RecordingPreferences preferences(temporary.filePath(QStringLiteral("settings.ini")));
+    preferences.setFrameRate(60);
+    preferences.setQuality(2);
+    preferences.setReplaySeconds(30);
+    preferences.setReplayClipSeconds(15);
+
+    preferences.setActiveGameProfile({
+        {QStringLiteral("frameRate"), 30},
+        {QStringLiteral("quality"), 4},
+        {QStringLiteral("replaySeconds"), 90},
+        {QStringLiteral("replayClipSeconds"), 60}
+    });
+    QCOMPARE(preferences.frameRate(), 60);
+    QCOMPARE(preferences.effectiveFrameRate(), 30);
+    QCOMPARE(preferences.quality(), 2);
+    QCOMPARE(preferences.effectiveQuality(), 4);
+    QCOMPARE(preferences.replaySeconds(), 30);
+    QCOMPARE(preferences.effectiveReplaySeconds(), 90);
+    QCOMPARE(preferences.replayClipSeconds(), 15);
+    QCOMPARE(preferences.effectiveReplayClipSeconds(), 60);
+
+    preferences.setActiveGameProfile({});
+    QCOMPARE(preferences.effectiveFrameRate(), 60);
+    QCOMPARE(preferences.effectiveQuality(), 2);
+    QCOMPARE(preferences.effectiveReplaySeconds(), 30);
+    QCOMPARE(preferences.effectiveReplayClipSeconds(), 15);
 }
 
 QTEST_MAIN(RecordingPreferencesTest)

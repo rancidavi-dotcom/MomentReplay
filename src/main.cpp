@@ -2,6 +2,7 @@
 #include "library/clip_repository.h"
 #include "recording/screen_recorder.h"
 #include "recording/recording_preferences.h"
+#include "recording/game_monitor.h"
 #include "recording/global_shortcuts.h"
 #include "desktop/tray_controller.h"
 #include "desktop/capture_popup.h"
@@ -64,11 +65,37 @@ int main(int argc, char *argv[])
         picturesDirectory = QDir(dataDirectory).filePath(QStringLiteral("Pictures"));
     const QString screenshotDirectory = QDir(picturesDirectory).filePath(QStringLiteral("Moment"));
     RecordingPreferences preferences(dataDirectory + QStringLiteral("/settings.ini"));
+    GameMonitor gameMonitor(dataDirectory + QStringLiteral("/settings.ini"));
     ScreenRecorder recorder(library, preferences, videoDirectory, screenshotDirectory);
     GlobalShortcuts globalShortcuts;
     TrayController trayController;
     QQmlApplicationEngine engine;
     CapturePopup capturePopup(&engine);
+    bool recordingStartedByGame = false;
+    bool activeProfileRequestsRecording = false;
+    QString recordingGameProcess;
+    const auto applyActiveGameProfile = [&] {
+        const QVariantMap profile = gameMonitor.activeProfileSettings();
+        preferences.setActiveGameProfile(profile);
+        activeProfileRequestsRecording = profile.value(QStringLiteral("autoRecord")).toBool();
+        const QString requestedProcess = gameMonitor.activeProcessName();
+        if (recordingStartedByGame
+            && (!activeProfileRequestsRecording || recordingGameProcess != requestedProcess)) {
+            if (recorder.recording())
+                recorder.stopRecording();
+            recordingStartedByGame = false;
+            recordingGameProcess.clear();
+        }
+        if (activeProfileRequestsRecording && !recordingStartedByGame
+            && !recorder.recording() && recorder.buffering()) {
+            recordingStartedByGame = true;
+            recordingGameProcess = requestedProcess;
+            recorder.startRecording();
+        }
+    };
+    QObject::connect(&gameMonitor, &GameMonitor::activeProfileChanged, &app,
+                     [applyActiveGameProfile](const QVariantMap &) { applyActiveGameProfile(); });
+    QObject::connect(&recorder, &ScreenRecorder::stateChanged, &app, applyActiveGameProfile);
     QObject::connect(&globalShortcuts, &GlobalShortcuts::saveReplayRequested,
                      &recorder, [&recorder, &globalShortcuts, &preferences, &capturePopup] {
         qInfo() << "Moment: replay shortcut dispatched to recorder";
@@ -78,7 +105,7 @@ int main(int argc, char *argv[])
                               QStringLiteral("Let capture run for a few seconds and try again."), true);
             return;
         }
-        recorder.saveReplayClip(preferences.replayClipSeconds());
+        recorder.saveReplayClip(preferences.effectiveReplayClipSeconds());
     });
     QObject::connect(&globalShortcuts, &GlobalShortcuts::saveScreenshotRequested,
                      &recorder, &ScreenRecorder::saveScreenshot);
@@ -127,6 +154,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("clipLibrary"), &library);
     engine.rootContext()->setContextProperty(QStringLiteral("screenRecorder"), &recorder);
     engine.rootContext()->setContextProperty(QStringLiteral("recordingPreferences"), &preferences);
+    engine.rootContext()->setContextProperty(QStringLiteral("gameMonitor"), &gameMonitor);
     engine.rootContext()->setContextProperty(QStringLiteral("globalShortcuts"), &globalShortcuts);
     engine.rootContext()->setContextProperty(QStringLiteral("trayController"), &trayController);
     const QUrl mainQml(QStringLiteral("qrc:/qt/qml/MedalLinux/qml/Main.qml"));

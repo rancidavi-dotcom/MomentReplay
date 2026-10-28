@@ -2,6 +2,7 @@
 #include "library/clip_repository.h"
 #include "recording/screen_recorder.h"
 #include "recording/recording_preferences.h"
+#include "recording/game_monitor.h"
 
 #include <QDir>
 #include <QPainter>
@@ -88,6 +89,8 @@ private slots:
         }
         QCOMPARE(library.clipCount(), 3);
         RecordingPreferences preferences(temporary.filePath("settings.ini"));
+        GameMonitor gameMonitor(temporary.filePath("settings.ini"));
+        QVERIFY(gameMonitor.addProfile(QStringLiteral("demo-game-bin"), QStringLiteral("Demo Game (sample)")));
         QVideoFrameInput input(QVideoFrameFormat(QSize(960, 540), QVideoFrameFormat::Format_ARGB8888));
         ScreenRecorder recorder(library, preferences, temporary.filePath("videos"), temporary.filePath("pictures"), input);
         VisualShortcuts shortcuts;
@@ -101,6 +104,7 @@ private slots:
         engine.rootContext()->setContextProperty("clipLibrary", &library);
         engine.rootContext()->setContextProperty("screenRecorder", &recorder);
         engine.rootContext()->setContextProperty("recordingPreferences", &preferences);
+        engine.rootContext()->setContextProperty("gameMonitor", &gameMonitor);
         engine.rootContext()->setContextProperty("globalShortcuts", &shortcuts);
         engine.rootContext()->setContextProperty("trayController", &tray);
         QQmlComponent component(&engine, QUrl("qrc:/qt/qml/MedalLinux/qml/Main.qml"));

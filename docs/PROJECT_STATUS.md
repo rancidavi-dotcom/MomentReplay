@@ -2,11 +2,11 @@
 
 O Moment é um aplicativo Linux nativo em desenvolvimento. Este repositório contém somente código original, documentação funcional e testes do projeto.
 
-Já implementado e testado: Library local com SQLite e player, captura Wayland via XDG ScreenCast/PipeWire, replay buffer, exportação MP4, screenshot PNG, áudio opcional, preferências persistentes, bandeja do sistema, popup próprio e atalhos globais F8/F9 via XDG GlobalShortcuts.
+Já implementado: Library local com SQLite e player, captura Wayland via XDG ScreenCast/PipeWire, replay buffer, exportação MP4, screenshot PNG, áudio opcional, preferências persistentes, bandeja do sistema, popup próprio, atalhos globais F8/F9 via XDG GlobalShortcuts e detecção local de processos de jogos com perfis persistentes. Os perfis podem iniciar/parar gravação contínua automaticamente quando habilitados.
 
-Em desenvolvimento: editor de vídeo não destrutivo, seleção de jogos/processos, faixas de áudio separadas, backend X11, compartilhamento e recursos de nuvem.
+Em desenvolvimento: ampliar a cobertura de launchers/compositores na detecção, eventos automáticos por jogo, editor de vídeo não destrutivo, faixas de áudio separadas, backend X11, compartilhamento e recursos de nuvem.
 
-O teste completo atual usa CTest e cobre nove alvos, incluindo ativação de atalhos sem foco com frames sintéticos, sem acessar gravações pessoais. A instalação local e os comandos de build estão descritos no README.
+CTest também verifica perfis com uma árvore `/proc` sintética e confirma que os overrides do jogo não alteram preferências globais. A instalação local e os comandos de build estão descritos no README.
 
 ## Pesquisa de referência
 

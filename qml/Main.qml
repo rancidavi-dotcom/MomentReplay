@@ -45,6 +45,8 @@ ApplicationWindow {
     property url activeSource: ""
     property bool activeIsImage: false
     property url activeImageSource: ""
+    property string selectedGameProcess: ""
+    property string manualGameProcess: ""
 
     Component.onCompleted: Qt.callLater(function() {
         if (!screenRecorder.buffering && !screenRecorder.busy)
@@ -536,7 +538,7 @@ ApplicationWindow {
                                         Label { text: "Replay buffer"; color: window.ink; font.pixelSize: 23; font.weight: Font.DemiBold }
                                         Label {
                                             Layout.fillWidth: true
-                                            text: "Save the recent " + recordingPreferences.replayClipSeconds + " seconds without interrupting the current session."
+                                            text: "Save the recent " + recordingPreferences.effectiveReplayClipSeconds + " seconds without interrupting the current session."
                                             color: window.muted; wrapMode: Text.Wrap; font.pixelSize: 12
                                         }
                                         RowLayout {
@@ -570,8 +572,8 @@ ApplicationWindow {
                                                 implicitHeight: 40; leftPadding: 14; rightPadding: 14
                                                 Layout.fillWidth: true
                                                 enabled: screenRecorder.buffering && screenRecorder.bufferedSeconds > 0 && !screenRecorder.replayExporting
-                                                text: screenRecorder.replayExporting ? "Saving…" : "Save last " + Math.min(recordingPreferences.replayClipSeconds, screenRecorder.bufferedSeconds) + " sec"
-                                                onClicked: screenRecorder.saveReplayClip(recordingPreferences.replayClipSeconds)
+                                                text: screenRecorder.replayExporting ? "Saving…" : "Save last " + Math.min(recordingPreferences.effectiveReplayClipSeconds, screenRecorder.bufferedSeconds) + " sec"
+                                                onClicked: screenRecorder.saveReplayClip(recordingPreferences.effectiveReplayClipSeconds)
                                                 contentItem: Label { text: parent.text; color: window.ink; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                                 background: Rectangle { radius: 10; color: parent.enabled ? "#2e4934" : "#202d36"; border.color: parent.enabled ? "#55734a" : window.line }
                                             }
@@ -671,6 +673,143 @@ ApplicationWindow {
                             spacing: 3
                             Label { text: "Preferences"; color: window.ink; font.pixelSize: 26; font.weight: Font.DemiBold; font.letterSpacing: -0.3 }
                             Label { text: "Recording, audio and keyboard shortcuts."; color: window.muted; font.pixelSize: 12 }
+                        }
+                        Surface {
+                            Layout.fillWidth: true
+                            id: gameProfilesCard
+                            implicitHeight: gameProfilesColumn.implicitHeight + 44
+                            ColumnLayout {
+                                id: gameProfilesColumn
+                                anchors.fill: parent; anchors.margins: 22; spacing: 14
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 4
+                                        SectionTitle { text: "GAME PROFILES" }
+                                        Label {
+                                            Layout.fillWidth: true
+                                            text: gameMonitor.activeGameName.length
+                                                ? "Detected: " + gameMonitor.activeGameName + " (" + gameMonitor.activeProcessName + ")"
+                                                : "No configured game is running. Moment checks local game processes."
+                                            color: gameMonitor.activeGameName.length ? window.accent : window.muted
+                                            font.pixelSize: 11; wrapMode: Text.Wrap
+                                        }
+                                    }
+                                    SettingCombo {
+                                        id: runningGamesCombo
+                                        Layout.preferredWidth: 220
+                                        model: gameMonitor.runningGameCandidates
+                                        currentIndex: selectedGameProcess.length ? model.indexOf(selectedGameProcess) : (model.length ? 0 : -1)
+                                        enabled: model.length > 0
+                                        displayText: model.length ? currentText : "No game processes found"
+                                        onActivated: selectedGameProcess = String(currentValue)
+                                    }
+                                    Button {
+                                        text: "Add detected"
+                                        enabled: gameMonitor.runningGameCandidates.length > 0
+                                        onClicked: {
+                                            const process = selectedGameProcess.length ? selectedGameProcess : String(runningGamesCombo.currentValue)
+                                            if (gameMonitor.addProfile(process)) selectedGameProcess = ""
+                                        }
+                                        contentItem: Label { text: parent.text; color: parent.enabled ? "#172111" : window.muted; font.pixelSize: 10; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                        background: Rectangle { radius: 7; color: parent.enabled ? window.accent : "#26313e"; border.color: parent.enabled ? "#9ecb61" : window.line }
+                                    }
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    TextField {
+                                        Layout.fillWidth: true
+                                        placeholderText: "Or enter executable name (for example: game.exe or game-bin)"
+                                        text: manualGameProcess
+                                        onTextChanged: manualGameProcess = text
+                                    }
+                                    Button {
+                                        text: "Add manually"
+                                        enabled: manualGameProcess.trim().length > 0
+                                        onClicked: {
+                                            if (gameMonitor.addProfile(manualGameProcess.trim())) manualGameProcess = ""
+                                        }
+                                        contentItem: Label { text: parent.text; color: parent.enabled ? "#172111" : window.muted; font.pixelSize: 10; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                        background: Rectangle { radius: 7; color: parent.enabled ? window.accent : "#26313e"; border.color: parent.enabled ? "#9ecb61" : window.line }
+                                    }
+                                }
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: "Profiles match the executable name. Automatic session recording starts and stops with a matching process only when enabled below."
+                                    color: window.muted; font.pixelSize: 10; wrapMode: Text.Wrap
+                                }
+                                Repeater {
+                                    model: gameMonitor
+                                    delegate: Rectangle {
+                                        required property int index
+                                        required property string gameName
+                                        required property string processName
+                                        required property bool autoRecord
+                                        required property int frameRate
+                                        required property int quality
+                                        required property int replaySeconds
+                                        required property int replayClipSeconds
+                                        Layout.fillWidth: true
+                                        implicitHeight: 150
+                                        radius: 10; color: "#101a23"; border.color: gameMonitor.activeProcessName.toLowerCase() === processName.toLowerCase() ? "#55754b" : window.line
+                                        ColumnLayout {
+                                            anchors.fill: parent; anchors.margins: 13; spacing: 9
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                ColumnLayout {
+                                                    Layout.fillWidth: true; spacing: 2
+                                                    Label { text: gameName; color: window.ink; font.pixelSize: 12; font.bold: true }
+                                                    Label { text: processName; color: window.muted; font.pixelSize: 10 }
+                                                }
+                                                MomentSwitch {
+                                                    text: checked ? "Auto record" : "Manual capture"
+                                                    checked: autoRecord
+                                                    onToggled: gameMonitor.setProfileAutoRecord(index, checked)
+                                                }
+                                                ToolButton {
+                                                    text: "Remove"
+                                                    onClicked: gameMonitor.removeProfile(index)
+                                                    contentItem: Label { text: parent.text; color: "#d39481"; font.pixelSize: 10; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                                    background: Rectangle { radius: 6; color: parent.hovered ? "#382823" : "transparent" }
+                                                }
+                                            }
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                SettingCombo {
+                                                    id: profileFps
+                                                    Layout.fillWidth: true; model: [30, 60]; currentIndex: frameRate === 60 ? 1 : 0
+                                                    displayText: "FPS · " + currentText
+                                                    onActivated: gameMonitor.setProfileSettings(index, Number(currentValue), profileQuality.currentIndex, Number(profileReplay.currentValue), Number(profileClip.currentValue))
+                                                }
+                                                SettingCombo {
+                                                    id: profileQuality
+                                                    Layout.fillWidth: true; model: ["Very low", "Low", "Standard", "High", "Very high"]; currentIndex: quality
+                                                    displayText: "Quality · " + currentText
+                                                    onActivated: gameMonitor.setProfileSettings(index, Number(profileFps.currentValue), currentIndex, Number(profileReplay.currentValue), Number(profileClip.currentValue))
+                                                }
+                                                SettingCombo {
+                                                    id: profileReplay
+                                                    Layout.fillWidth: true; model: [15, 30, 60, 90, 120]; currentIndex: Math.max(0, model.indexOf(replaySeconds))
+                                                    displayText: "Buffer · " + currentText + "s"
+                                                    onActivated: gameMonitor.setProfileSettings(index, Number(profileFps.currentValue), profileQuality.currentIndex, Number(currentValue), Number(profileClip.currentValue))
+                                                }
+                                                SettingCombo {
+                                                    id: profileClip
+                                                    Layout.fillWidth: true; model: [15, 30, 60, 90, 120]; currentIndex: Math.max(0, model.indexOf(replayClipSeconds))
+                                                    displayText: "Clip · " + currentText + "s"
+                                                    onActivated: gameMonitor.setProfileSettings(index, Number(profileFps.currentValue), profileQuality.currentIndex, Number(profileReplay.currentValue), Number(currentValue))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Label {
+                                    visible: gameMonitor.profileCount === 0
+                                    Layout.fillWidth: true
+                                    text: "Add a running game above to create its first profile."
+                                    color: window.muted; font.pixelSize: 11
+                                }
+                            }
                         }
                         Surface {
                             Layout.fillWidth: true; implicitHeight: 420

@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QString>
 #include <QSettings>
+#include <QVariantMap>
 
 class RecordingPreferences final : public QObject {
     Q_OBJECT
@@ -12,6 +13,10 @@ class RecordingPreferences final : public QObject {
     Q_PROPERTY(int replayClipSeconds READ replayClipSeconds WRITE setReplayClipSeconds NOTIFY replayClipSecondsChanged)
     Q_PROPERTY(bool captureAudio READ captureAudio WRITE setCaptureAudio NOTIFY captureAudioChanged)
     Q_PROPERTY(QByteArray audioInputId READ audioInputId WRITE setAudioInputId NOTIFY audioInputIdChanged)
+    Q_PROPERTY(int effectiveFrameRate READ effectiveFrameRate NOTIFY effectiveSettingsChanged)
+    Q_PROPERTY(int effectiveQuality READ effectiveQuality NOTIFY effectiveSettingsChanged)
+    Q_PROPERTY(int effectiveReplaySeconds READ effectiveReplaySeconds NOTIFY effectiveSettingsChanged)
+    Q_PROPERTY(int effectiveReplayClipSeconds READ effectiveReplayClipSeconds NOTIFY effectiveSettingsChanged)
 
 public:
     explicit RecordingPreferences(const QString &settingsFile, QObject *parent = nullptr);
@@ -22,6 +27,11 @@ public:
     int replayClipSeconds() const;
     bool captureAudio() const;
     QByteArray audioInputId() const;
+    int effectiveFrameRate() const;
+    int effectiveQuality() const;
+    int effectiveReplaySeconds() const;
+    int effectiveReplayClipSeconds() const;
+    bool effectiveCaptureAudio() const;
     QString settingsFilePath() const;
 
     Q_INVOKABLE void setFrameRate(int value);
@@ -30,6 +40,7 @@ public:
     Q_INVOKABLE void setReplayClipSeconds(int value);
     Q_INVOKABLE void setCaptureAudio(bool value);
     Q_INVOKABLE void setAudioInputId(const QByteArray &value);
+    void setActiveGameProfile(const QVariantMap &profile);
 
 signals:
     void frameRateChanged();
@@ -38,6 +49,7 @@ signals:
     void replayClipSecondsChanged();
     void captureAudioChanged();
     void audioInputIdChanged();
+    void effectiveSettingsChanged();
 
 private:
     QSettings m_settings;
@@ -47,4 +59,5 @@ private:
     int m_replayClipSeconds = 15;
     bool m_captureAudio = false;
     QByteArray m_audioInputId;
+    QVariantMap m_activeGameProfile;
 };

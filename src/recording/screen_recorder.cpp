@@ -43,11 +43,19 @@ void ScreenRecorder::initialize()
     connect(&m_mediaDevices, &QMediaDevices::audioInputsChanged,
             this, [this] {
         emit audioDevicesChanged();
-        if (m_preferences.captureAudio() && m_captureActive && !recording())
+        if (m_preferences.effectiveCaptureAudio() && m_captureActive && !recording())
             syncAudioCapture();
     });
     connect(&m_preferences, &RecordingPreferences::captureAudioChanged,
             this, &ScreenRecorder::syncAudioCapture);
+    connect(&m_preferences, &RecordingPreferences::effectiveSettingsChanged,
+            this, [this] {
+        m_replayBuffer.setBufferSeconds(m_preferences.effectiveReplaySeconds());
+        m_replayBuffer.setFrameRate(m_preferences.effectiveFrameRate());
+        syncAudioCapture();
+        emit stateChanged();
+        emit bufferSecondsChanged();
+    });
     connect(&m_preferences, &RecordingPreferences::audioInputIdChanged,
             this, &ScreenRecorder::syncAudioCapture);
     m_captureSession.setRecorder(&m_mediaRecorder);
@@ -95,7 +103,7 @@ void ScreenRecorder::initialize()
     });
     connect(m_waylandCapture, &WaylandScreenCast::activeChanged, this, [this](bool active) {
         m_captureActive = active;
-        if (active && m_preferences.captureAudio())
+        if (active && m_preferences.effectiveCaptureAudio())
             startAudioCapture();
         else if (!active)
             stopAudioCapture();
@@ -109,9 +117,9 @@ void ScreenRecorder::initialize()
     });
     connect(m_waylandCapture, &WaylandScreenCast::failed,
             this, [this](const QString &message) { fail(message); });
-    m_replayBuffer.setBufferSeconds(m_preferences.replaySeconds());
+    m_replayBuffer.setBufferSeconds(m_preferences.effectiveReplaySeconds());
     connect(&m_preferences, &RecordingPreferences::replaySecondsChanged, this, [this] {
-        m_replayBuffer.setBufferSeconds(m_preferences.replaySeconds());
+        m_replayBuffer.setBufferSeconds(m_preferences.effectiveReplaySeconds());
     });
     connect(&m_replayBuffer, &InstantReplay::bufferSecondsChanged,
             this, &ScreenRecorder::bufferSecondsChanged);
@@ -263,14 +271,14 @@ void ScreenRecorder::setAudioInputIndex(int index)
     stopAudioCapture();
     m_replayBuffer.clearAudioBuffer();
     m_preferences.setAudioInputId(devices.at(index).id());
-    if (m_preferences.captureAudio() && m_captureActive)
+    if (m_preferences.effectiveCaptureAudio() && m_captureActive)
         startAudioCapture();
     emit audioDevicesChanged();
 }
 
 void ScreenRecorder::syncAudioCapture()
 {
-    if (!m_preferences.captureAudio()) {
+    if (!m_preferences.effectiveCaptureAudio()) {
         stopAudioCapture();
         m_replayBuffer.clearAudioBuffer();
         setAudioCaptureStatus(QStringLiteral("Audio capture is off"));
@@ -289,7 +297,7 @@ void ScreenRecorder::syncAudioCapture()
 
 void ScreenRecorder::startAudioCapture()
 {
-    if (!m_preferences.captureAudio() || !m_captureActive || m_audioSource)
+    if (!m_preferences.effectiveCaptureAudio() || !m_captureActive || m_audioSource)
         return;
 
     const QAudioDevice device = selectedAudioDevice();
@@ -361,7 +369,7 @@ void ScreenRecorder::stopAudioCapture()
     m_sessionAudioQueue.clear();
     m_sessionAudioQueuedBytes = 0;
     m_sessionAudioEnabled = false;
-    setAudioCaptureStatus(m_preferences.captureAudio()
+    setAudioCaptureStatus(m_preferences.effectiveCaptureAudio()
         ? QStringLiteral("Audio is waiting for screen capture")
         : QStringLiteral("Audio capture is off"));
 }
@@ -445,7 +453,7 @@ void ScreenRecorder::startBuffering()
 {
     if (busy())
         return;
-    m_replayBuffer.setFrameRate(m_preferences.frameRate());
+    m_replayBuffer.setFrameRate(m_preferences.effectiveFrameRate());
     m_recordAfterCapture = false;
     m_stopCaptureRequested = false;
     m_state = State::AwaitingScreenPermission;
@@ -454,7 +462,7 @@ void ScreenRecorder::startBuffering()
     if (m_videoFrameInput) {
         m_captureActive = true;
         m_state = State::Buffering;
-        if (m_preferences.captureAudio())
+        if (m_preferences.effectiveCaptureAudio())
             startAudioCapture();
         emit stateChanged();
         setStatusMessage(QStringLiteral("Replay buffer is ready for test frames"));
@@ -502,7 +510,7 @@ void ScreenRecorder::startRecording()
 
     QMediaFormat format(QMediaFormat::MPEG4);
     format.setVideoCodec(QMediaFormat::VideoCodec::H264);
-    if (m_preferences.captureAudio()) {
+    if (m_preferences.effectiveCaptureAudio()) {
         format.setAudioCodec(QMediaFormat::AudioCodec::AAC);
         if (!format.isSupported(QMediaFormat::Encode)) {
             emit operationFailed(QStringLiteral("Audio capture is enabled, but MP4/H.264/AAC encoding is unavailable."));
@@ -535,10 +543,10 @@ void ScreenRecorder::startRecording()
     m_outputPath = makeOutputPath();
     m_stopRequested = false;
     m_stopCaptureRequested = false;
-    m_replayBuffer.setFrameRate(m_preferences.frameRate());
+    m_replayBuffer.setFrameRate(m_preferences.effectiveFrameRate());
     m_mediaRecorder.setMediaFormat(format);
-    m_mediaRecorder.setVideoFrameRate(m_preferences.frameRate());
-    m_mediaRecorder.setQuality(static_cast<QMediaRecorder::Quality>(m_preferences.quality()));
+    m_mediaRecorder.setVideoFrameRate(m_preferences.effectiveFrameRate());
+    m_mediaRecorder.setQuality(static_cast<QMediaRecorder::Quality>(m_preferences.effectiveQuality()));
     m_mediaRecorder.setOutputLocation(QUrl::fromLocalFile(m_outputPath));
 
     if (m_state == State::Buffering || m_captureActive) {
@@ -552,9 +560,9 @@ void ScreenRecorder::startRecording()
     emit stateChanged();
     if (m_videoFrameInput) {
         m_captureActive = true;
-        if (m_preferences.captureAudio())
+        if (m_preferences.effectiveCaptureAudio())
             startAudioCapture();
-        if (m_preferences.captureAudio() && !m_audioSource)
+        if (m_preferences.effectiveCaptureAudio() && !m_audioSource)
             return;
         m_sessionAudioEnabled = bool(m_audioSource);
         m_mediaRecorder.record();
@@ -579,7 +587,7 @@ void ScreenRecorder::stopRecording()
 
 void ScreenRecorder::saveReplayClip(int durationSeconds)
 {
-    if (m_preferences.captureAudio() && !m_replayBuffer.audioBuffered()) {
+    if (m_preferences.effectiveCaptureAudio() && !m_replayBuffer.audioBuffered()) {
         const QString message = QStringLiteral("Audio is enabled, but no audio samples reached the replay buffer yet.");
         setStatusMessage(message);
         emit operationFailed(message);
@@ -587,7 +595,7 @@ void ScreenRecorder::saveReplayClip(int durationSeconds)
     }
     const QString outputPath = makeReplayPath();
     if (!m_replayBuffer.saveLastClip(outputPath, durationSeconds,
-                                     m_preferences.frameRate(), m_preferences.quality()))
+                                     m_preferences.effectiveFrameRate(), m_preferences.effectiveQuality()))
         return;
     emit stateChanged();
 }
@@ -677,7 +685,7 @@ void ScreenRecorder::finalizeRecording()
         m_sessionAudioEnabled = false;
         m_sessionAudioQueue.clear();
         m_sessionAudioQueuedBytes = 0;
-        if (m_preferences.captureAudio())
+        if (m_preferences.effectiveCaptureAudio())
             m_audioPollTimer.start();
         m_state = State::Buffering;
         setStatusMessage(QStringLiteral("Recording saved; replay buffer is still capturing"));
