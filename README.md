@@ -33,6 +33,16 @@ ctest --test-dir build --output-on-failure
 
 Para iniciar isolando o banco em uma pasta descartável: `QT_QPA_PLATFORM=offscreen ./build/medal-linux --data-dir /tmp/medal-linux-smoke`. O argumento `--data-dir` permite teste sem tocar no perfil persistente do usuário. Detalhes da bandeja estão em [FEATURE_SYSTEM_TRAY.md](docs/FEATURE_SYSTEM_TRAY.md); screenshot em [FEATURE_SCREENSHOTS.md](docs/FEATURE_SCREENSHOTS.md), replay em [FEATURE_INSTANT_REPLAY.md](docs/FEATURE_INSTANT_REPLAY.md), e captura de áudio em [FEATURE_AUDIO.md](docs/FEATURE_AUDIO.md).
 
+## Arch Linux / AUR
+
+O repositório inclui um `PKGBUILD` para Arch Linux. Depois que o pacote for publicado no AUR, a instalação será:
+
+```sh
+yay -S momentreplay
+```
+
+Para testar localmente antes da publicação, execute `makepkg -Ccf` no diretório do projeto. O pacote compila a revisão do branch `main`, instala o binário em `/usr/bin/medal-linux` e registra o lançador `io.moment.Moment`.
+
 ## Licenciamento e proveniência
 
 Nenhum conteúdo proprietário foi copiado. Antes de selecionar dependências, registrar versão, licença de código/plugins/codec e distribuição. Qt e FFmpeg têm componentes/opções com obrigações diferentes; ver a seção de licenças no plano. A lista de SBOM e avisos deve acompanhar cada release.
