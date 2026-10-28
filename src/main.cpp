@@ -6,6 +6,9 @@
 #include "recording/global_shortcuts.h"
 #include "desktop/tray_controller.h"
 #include "desktop/capture_popup.h"
+#include "desktop/discord_presence.h"
+#include "editor/video_editor.h"
+#include "share/google_drive_share.h"
 
 #include <QDir>
 #include <QFile>
@@ -64,8 +67,11 @@ int main(int argc, char *argv[])
     if (picturesDirectory.isEmpty())
         picturesDirectory = QDir(dataDirectory).filePath(QStringLiteral("Pictures"));
     const QString screenshotDirectory = QDir(picturesDirectory).filePath(QStringLiteral("Moment"));
+    VideoEditor videoEditor(library, dataDirectory + QStringLiteral("/EditorProjects"), videoDirectory);
+    GoogleDriveShare driveShare;
     RecordingPreferences preferences(dataDirectory + QStringLiteral("/settings.ini"));
     GameMonitor gameMonitor(dataDirectory + QStringLiteral("/settings.ini"));
+    DiscordPresence discordPresence(gameMonitor, dataDirectory + QStringLiteral("/settings.ini"));
     ScreenRecorder recorder(library, preferences, videoDirectory, screenshotDirectory);
     GlobalShortcuts globalShortcuts;
     TrayController trayController;
@@ -126,6 +132,19 @@ int main(int argc, char *argv[])
                      [&capturePopup](const QString &message) {
         capturePopup.show(QStringLiteral("Capture could not finish"), message, true);
     });
+    QObject::connect(&videoEditor, &VideoEditor::exportSucceeded, &capturePopup,
+                     [&capturePopup](const QString &path) {
+        capturePopup.show(QStringLiteral("Edited clip exported"), QFileInfo(path).fileName());
+    });
+    QObject::connect(&driveShare, &GoogleDriveShare::shareCompleted, &capturePopup,
+                     [&capturePopup](const QString &) {
+        capturePopup.show(QStringLiteral("Share link ready"),
+                          QStringLiteral("Copied to clipboard. Paste it anywhere to share this clip."));
+    });
+    QObject::connect(&driveShare, &GoogleDriveShare::shareFailed, &capturePopup,
+                     [&capturePopup](const QString &message) {
+        capturePopup.show(QStringLiteral("Clip sharing failed"), message, true);
+    });
 
     QTimer shutdownPoll;
     shutdownPoll.setInterval(100);
@@ -155,6 +174,9 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("screenRecorder"), &recorder);
     engine.rootContext()->setContextProperty(QStringLiteral("recordingPreferences"), &preferences);
     engine.rootContext()->setContextProperty(QStringLiteral("gameMonitor"), &gameMonitor);
+    engine.rootContext()->setContextProperty(QStringLiteral("discordPresence"), &discordPresence);
+    engine.rootContext()->setContextProperty(QStringLiteral("videoEditor"), &videoEditor);
+    engine.rootContext()->setContextProperty(QStringLiteral("driveShare"), &driveShare);
     engine.rootContext()->setContextProperty(QStringLiteral("globalShortcuts"), &globalShortcuts);
     engine.rootContext()->setContextProperty(QStringLiteral("trayController"), &trayController);
     const QUrl mainQml(QStringLiteral("qrc:/qt/qml/MedalLinux/qml/Main.qml"));

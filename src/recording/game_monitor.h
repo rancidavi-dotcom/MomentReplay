@@ -12,6 +12,7 @@ class GameMonitor final : public QAbstractListModel {
     Q_PROPERTY(QString activeGameName READ activeGameName NOTIFY activeGameChanged)
     Q_PROPERTY(QString activeProcessName READ activeProcessName NOTIFY activeGameChanged)
     Q_PROPERTY(QStringList runningGameCandidates READ runningGameCandidates NOTIFY runningGameCandidatesChanged)
+    Q_PROPERTY(QString presenceTargetName READ presenceTargetName NOTIFY presenceTargetChanged)
     Q_PROPERTY(int profileCount READ profileCount NOTIFY profileCountChanged)
 
 public:
@@ -36,6 +37,7 @@ public:
     QString activeGameName() const;
     QString activeProcessName() const;
     QStringList runningGameCandidates() const;
+    QString presenceTargetName() const;
     int profileCount() const;
 
     Q_INVOKABLE bool addProfile(const QString &processName, const QString &displayName = {});
@@ -50,6 +52,7 @@ signals:
     void activeGameChanged();
     void activeProfileChanged(const QVariantMap &profile);
     void runningGameCandidatesChanged();
+    void presenceTargetChanged();
     void profileCountChanged();
 
 private:
@@ -57,6 +60,8 @@ private:
         QString name;
         QString executablePath;
         QString gameName;
+        QString commandLine;
+        bool gameCandidate = false;
     };
 
     void loadProfiles();
@@ -74,4 +79,5 @@ private:
     QList<ProcessInfo> m_processes;
     QString m_activeGameName;
     QString m_activeProcessName;
+    QString m_presenceTargetName;
 };

@@ -37,6 +37,8 @@ public:
     QString statusMessage() const;
 
     Q_INVOKABLE void importFile(const QString &path);
+    bool replaceWithFile(const QString &originalPath, const QString &replacementPath,
+                         QString *error = nullptr);
     Q_INVOKABLE void removeFromLibrary(qint64 id);
     Q_INVOKABLE void toggleFavorite(qint64 id);
     Q_INVOKABLE void reload();

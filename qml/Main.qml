@@ -47,6 +47,71 @@ ApplicationWindow {
     property url activeImageSource: ""
     property string selectedGameProcess: ""
     property string manualGameProcess: ""
+    property bool shareSettingsHighlighted: false
+
+    Timer {
+        id: shareSettingsHighlightTimer
+        interval: 2200
+        onTriggered: window.shareSettingsHighlighted = false
+    }
+
+    function openShareSettings() {
+        page = 2
+        Qt.callLater(function() {
+            const cardY = shareSettingsCard.mapToItem(preferencesScroll.contentItem, Qt.point(0, 0)).y
+            preferencesScroll.contentY = Math.max(0, Math.min(cardY - 20,
+                preferencesScroll.contentHeight - preferencesScroll.height))
+            window.shareSettingsHighlighted = true
+            shareSettingsHighlightTimer.restart()
+        })
+    }
+
+    function actionButtonFill(button, normalColor, disabledColor) {
+        if (!button.enabled)
+            return disabledColor
+        if (button.down)
+            return Qt.darker(normalColor, 1.12)
+        if (button.hovered)
+            return Qt.lighter(normalColor, 1.24)
+        return normalColor
+    }
+
+    function formatTime(milliseconds) {
+        const totalMs = Math.max(0, Math.floor(milliseconds))
+        const minutes = Math.floor(totalMs / 60000)
+        const seconds = Math.floor(totalMs / 1000) % 60
+        const centiseconds = Math.floor((totalMs % 1000) / 10)
+        return minutes + ":" + String(seconds).padStart(2, "0") + "." + String(centiseconds).padStart(2, "0")
+    }
+
+    function openEditor() {
+        if (activeSource.toString().length === 0 || activeIsImage)
+            return
+        player.stop()
+        player.source = activeSource
+        videoEditor.openClip(localPathFromUrl(activeSource))
+        page = 3
+        Qt.callLater(function() {
+            videoEditor.setDurationMs(player.duration)
+            player.position = videoEditor.inMs
+            player.play()
+        })
+    }
+
+    function navigateToEditor() {
+        if (activeSource.toString().length > 0 && !activeIsImage)
+            openEditor()
+        else {
+            player.stop()
+            player.source = ""
+            videoEditor.openClip("")
+            page = 3
+        }
+    }
+
+    function localPathFromUrl(fileUrl) {
+        return decodeURIComponent(fileUrl.toString().replace(/^file:\/\//, ""))
+    }
 
     Component.onCompleted: Qt.callLater(function() {
         if (!screenRecorder.buffering && !screenRecorder.busy)
@@ -61,6 +126,30 @@ ApplicationWindow {
         onAccepted: {
             for (const file of selectedFiles)
                 clipLibrary.importFile(file.toLocalFile())
+        }
+    }
+
+    FileDialog {
+        id: editorVideoDialog
+        title: "Choose a video to edit"
+        fileMode: FileDialog.OpenFile
+        nameFilters: ["Videos (*.mp4 *.m4v *.mkv *.mov *.webm *.avi *.mpg *.mpeg *.ts *.mts *.ogv)", "All files (*)"]
+        onAccepted: {
+            const videoUrl = selectedFile
+            const videoPath = window.localPathFromUrl(videoUrl)
+            clipLibrary.importFile(videoPath)
+            window.activeSource = videoUrl
+            window.activeIsImage = false
+            window.activeImageSource = ""
+            player.stop()
+            player.source = videoUrl
+            videoEditor.openClip(videoPath)
+            window.page = 3
+            Qt.callLater(function() {
+                videoEditor.setDurationMs(player.duration)
+                player.position = videoEditor.inMs
+                player.play()
+            })
         }
     }
 
@@ -103,12 +192,42 @@ ApplicationWindow {
     MediaPlayer {
         id: player
         audioOutput: AudioOutput { volume: volumeSlider.value }
-        videoOutput: videoOutput
+        videoOutput: window.page === 3 ? editorVideoOutput : libraryVideoOutput
         onErrorOccurred: function(error, errorString) {
             if (error !== MediaPlayer.NoError) {
                 messageDialog.message = errorString.length ? errorString : "This video could not be played by the available media plugins."
                 messageDialog.open()
             }
+        }
+    }
+
+    Connections {
+        target: player
+        function onDurationChanged() {
+            if (window.page === 3)
+                videoEditor.setDurationMs(player.duration)
+        }
+        function onPositionChanged() {
+            if (window.page === 3 && player.playbackState === MediaPlayer.PlayingState
+                    && player.position >= videoEditor.outMs)
+                player.pause()
+        }
+    }
+
+    Connections {
+        target: videoEditor
+        function onExportSucceeded(path) {
+            window.activeSource = videoEditor.sourceUrl
+            window.activeIsImage = false
+            window.activeImageSource = ""
+            player.stop()
+            player.source = videoEditor.sourceUrl
+            window.page = 3
+            Qt.callLater(function() {
+                videoEditor.setDurationMs(player.duration)
+                player.position = 0
+                player.play()
+            })
         }
     }
 
@@ -191,6 +310,71 @@ ApplicationWindow {
         }
     }
 
+    component EditorTrimTimeline: Item {
+        id: trimTimeline
+        property real durationMs: 0
+        property real inMs: 0
+        property real outMs: 0
+        property real playheadMs: 0
+        property bool editingEnabled: false
+        signal trimStartRequested(int positionMs)
+        signal trimEndRequested(int positionMs)
+        signal seekRequested(int positionMs)
+        implicitHeight: 70
+
+        function positionAt(xPosition) {
+            if (durationMs <= 0 || track.width <= 0)
+                return 0
+            return Math.round(Math.max(0, Math.min(1, (xPosition - track.x) / track.width)) * durationMs)
+        }
+        function xFor(positionMs) {
+            return track.x + (durationMs > 0 ? Math.max(0, Math.min(1, positionMs / durationMs)) * track.width : 0)
+        }
+
+        Rectangle {
+            id: track
+            x: 16; y: 31; width: Math.max(1, trimTimeline.width - 32); height: 10; radius: 5
+            color: "#2c3c48"
+            Rectangle {
+                x: trimTimeline.durationMs > 0 ? trimTimeline.inMs / trimTimeline.durationMs * parent.width : 0
+                width: trimTimeline.durationMs > 0 ? Math.max(0, (trimTimeline.outMs - trimTimeline.inMs) / trimTimeline.durationMs * parent.width) : 0
+                height: parent.height; radius: 5; color: "#587a3c"
+            }
+            MouseArea {
+                anchors.fill: parent
+                enabled: trimTimeline.editingEnabled
+                cursorShape: Qt.PointingHandCursor
+                onClicked: trimTimeline.seekRequested(trimTimeline.positionAt(mapToItem(trimTimeline, mouse.x, mouse.y).x))
+            }
+        }
+        Rectangle {
+            x: trimTimeline.xFor(trimTimeline.playheadMs) - 1; y: 19; width: 2; height: 34
+            color: window.ink; opacity: trimTimeline.durationMs > 0 ? 0.9 : 0.25; z: 2
+        }
+        Rectangle {
+            x: trimTimeline.xFor(trimTimeline.inMs) - width / 2; y: 20; width: 14; height: 32; radius: 5
+            color: trimTimeline.editingEnabled ? window.accent : "#70816c"; z: 3
+            Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: parent.verticalCenter; width: 2; height: 16; radius: 1; color: "#203018" }
+            MouseArea {
+                anchors.fill: parent; enabled: trimTimeline.editingEnabled; cursorShape: Qt.SizeHorCursor
+                onPositionChanged: if (pressed) trimTimeline.trimStartRequested(Math.min(trimTimeline.positionAt(mapToItem(trimTimeline, mouse.x, mouse.y).x), trimTimeline.outMs - 1))
+            }
+        }
+        Rectangle {
+            x: trimTimeline.xFor(trimTimeline.outMs) - width / 2; y: 20; width: 14; height: 32; radius: 5
+            color: trimTimeline.editingEnabled ? window.accent : "#70816c"; z: 3
+            Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.verticalCenter: parent.verticalCenter; width: 2; height: 16; radius: 1; color: "#203018" }
+            MouseArea {
+                anchors.fill: parent; enabled: trimTimeline.editingEnabled; cursorShape: Qt.SizeHorCursor
+                onPositionChanged: if (pressed) trimTimeline.trimEndRequested(Math.max(trimTimeline.positionAt(mapToItem(trimTimeline, mouse.x, mouse.y).x), trimTimeline.inMs + 1))
+            }
+        }
+        Label { x: 16; y: 0; text: trimTimeline.durationMs > 0 ? "00:00.00" : "—"; color: window.muted; font.pixelSize: 9 }
+        Label { x: Math.max(16, trimTimeline.width - width - 16); y: 0; text: window.formatTime(trimTimeline.durationMs); color: window.muted; font.pixelSize: 9 }
+        Label { x: 16; y: 55; text: "IN  " + window.formatTime(trimTimeline.inMs); color: window.accent; font.pixelSize: 9; font.bold: true }
+        Label { x: Math.max(16, trimTimeline.width - width - 16); y: 55; text: "OUT  " + window.formatTime(trimTimeline.outMs); color: window.accent; font.pixelSize: 9; font.bold: true }
+    }
+
     component MomentProgress: ProgressBar {
         id: progress
         implicitHeight: 5
@@ -236,7 +420,7 @@ ApplicationWindow {
             Item { Layout.fillWidth: true }
             
         }
-        background: Rectangle { radius: 7; color: nav.selected ? "#22352c" : nav.hovered ? "#192731" : "transparent"; border.color: nav.selected ? "#385440" : "transparent"; Behavior on color { ColorAnimation { duration: 120 } } }
+        background: Rectangle { radius: 7; color: nav.selected ? "#22352c" : nav.hovered ? "#2a3c49" : "transparent"; border.color: nav.selected ? "#385440" : nav.hovered ? "#334957" : "transparent"; Behavior on color { ColorAnimation { duration: 120 } } }
     }
 
     component SectionTitle: Label {
@@ -285,6 +469,7 @@ ApplicationWindow {
                 SectionTitle { text: "WORKSPACE"; Layout.leftMargin: 12; Layout.bottomMargin: 4 }
                 NavButton { label: "Library"; iconText: "library"; selected: window.page === 0; onClicked: window.page = 0 }
                 NavButton { label: "Capture"; iconText: "capture"; selected: window.page === 1; onClicked: window.page = 1 }
+                NavButton { objectName: "editorNavButton"; label: "Editor"; iconText: "play"; selected: window.page === 3; onClicked: window.navigateToEditor() }
                 NavButton { label: "Preferences"; iconText: "settings"; selected: window.page === 2; onClicked: window.page = 2 }
                 Item { Layout.fillHeight: true }
                 Rectangle {
@@ -342,7 +527,7 @@ ApplicationWindow {
                                 implicitHeight: 38; leftPadding: 16; rightPadding: 16
                                 onClicked: importDialog.open()
                                 contentItem: Label { text: parent.text; color: window.ink; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                background: Rectangle { radius: 7; color: parent.hovered ? "#2c3b45" : "#23313b"; border.color: "#3d4f5a" }
+                                background: Rectangle { radius: 7; color: window.actionButtonFill(parent, "#23313b", "#1b252e"); border.color: parent.hovered ? "#718b99" : "#3d4f5a"; Behavior on color { ColorAnimation { duration: 100 } } }
                             }
                         }
                         RowLayout {
@@ -368,7 +553,7 @@ ApplicationWindow {
                                         color: window.ink; placeholderTextColor: "#748091"
                                         onTextChanged: clipLibrary.searchQuery = text
                                         MomentIcon { name: "search"; width: 15; height: 15; anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; ink: "#7d93a5" }
-                                        background: Rectangle { radius: 9; color: "#0e1822"; border.color: parent.activeFocus ? "#6f9254" : window.line }
+                                        background: Rectangle { radius: 9; color: parent.hovered ? "#152430" : "#0e1822"; border.color: parent.activeFocus ? "#6f9254" : parent.hovered ? "#4b6574" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
                                     }
                                     ListView {
                                         id: clipList
@@ -464,11 +649,35 @@ ApplicationWindow {
                                         Layout.fillWidth: true
                                         SectionTitle { text: "PREVIEW" }
                                         Item { Layout.fillWidth: true }
+                                        Button {
+                                            text: "Edit clip"
+                                            enabled: window.activeSource.toString().length > 0 && !window.activeIsImage
+                                            implicitHeight: 30; leftPadding: 12; rightPadding: 12
+                                            onClicked: window.openEditor()
+                                            contentItem: Label { text: parent.text; color: parent.enabled ? window.ink : window.muted; font.pixelSize: 10; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                            background: Rectangle { radius: 7; color: window.actionButtonFill(parent, "#22352c", "#1b252e"); border.color: parent.hovered ? "#8dbb62" : parent.enabled ? "#405d45" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
+                                        }
+                                        Button {
+                                            objectName: "createClipShareLinkButton"
+                                            text: driveShare.busy ? "Sharing…" : driveShare.connected ? "Create link" : "Share clip"
+                                            enabled: window.activeSource.toString().length > 0 && !window.activeIsImage && !driveShare.busy
+                                            implicitHeight: 30; leftPadding: 12; rightPadding: 12
+                                            ToolTip.visible: hovered && !driveShare.configured
+                                            ToolTip.text: "Drive sharing will be available when Moment's OAuth app is configured."
+                            onClicked: {
+                                if (!driveShare.configured)
+                                    window.openShareSettings()
+                                else
+                                    driveShare.shareClipUrl(window.activeSource)
+                            }
+                                            contentItem: Label { text: parent.text; color: parent.enabled ? window.ink : window.muted; font.pixelSize: 10; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                            background: Rectangle { radius: 7; color: window.actionButtonFill(parent, "#22352c", "#1b252e"); border.color: parent.hovered ? "#9dd565" : parent.enabled ? "#405d45" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
+                                        }
                                         Label { text: player.playbackState === MediaPlayer.PlayingState ? "PLAYING" : window.activeSource.toString().length ? (window.activeIsImage ? "IMAGE" : "VIDEO") : "READY WHEN YOU ARE"; color: player.playbackState === MediaPlayer.PlayingState ? window.accent : "#8097a8"; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
                                     }
                                     Rectangle {
                                         Layout.fillWidth: true; Layout.fillHeight: true; radius: 12; color: "#0c141d"; clip: true
-                                        VideoOutput { id: videoOutput; anchors.fill: parent; fillMode: VideoOutput.PreserveAspectFit; visible: !window.activeIsImage }
+                                        VideoOutput { id: libraryVideoOutput; anchors.fill: parent; fillMode: VideoOutput.PreserveAspectFit; visible: !window.activeIsImage }
                                         Image { anchors.fill: parent; source: window.activeImageSource; fillMode: Image.PreserveAspectFit; visible: window.activeIsImage; asynchronous: true }
                                         Column {
                                             anchors.centerIn: parent; width: parent.width - 36; spacing: 15; visible: window.activeSource.toString().length === 0
@@ -487,6 +696,51 @@ ApplicationWindow {
                                         MomentSlider { id: seekSlider; Layout.fillWidth: true; from: 0; to: Math.max(player.duration, 1); value: player.position; enabled: player.duration > 0 && !window.activeIsImage; onMoved: player.position = value }
                                         Label { text: Math.floor(player.position / 60000) + ":" + String(Math.floor(player.position / 1000) % 60).padStart(2, "0") + " / " + Math.floor(player.duration / 60000) + ":" + String(Math.floor(player.duration / 1000) % 60).padStart(2, "0"); color: window.muted; font.pixelSize: 10 }
                                         MomentSlider { id: volumeSlider; Layout.preferredWidth: 72; from: 0; to: 1; value: 0.75 }
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 5
+                                        Label {
+                                            objectName: "clipShareStatus"
+                                            Layout.fillWidth: true
+                                            visible: window.activeSource.toString().length > 0
+                                            text: driveShare.statusMessage
+                                            color: driveShare.lastShareUrl.length > 0 ? window.accent : window.muted
+                                            font.pixelSize: 11; wrapMode: Text.Wrap
+                                        }
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            visible: driveShare.lastShareUrl.length > 0
+                                            Label {
+                                                objectName: "clipShareLink"
+                                                Layout.fillWidth: true
+                                                text: driveShare.lastShareUrl
+                                                color: window.accent
+                                                font.pixelSize: 10
+                                                wrapMode: Text.WrapAnywhere
+                                                maximumLineCount: 2
+                                                elide: Text.ElideMiddle
+                                            }
+                                            Button {
+                                                objectName: "copyClipShareLinkButton"
+                                                text: "Copy link"
+                                                onClicked: driveShare.copyLastShareUrl()
+                                                contentItem: Label {
+                                                    text: parent.text
+                                                    color: parent.enabled ? window.ink : window.muted
+                                                    font.pixelSize: 10
+                                                    font.weight: Font.DemiBold
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                    verticalAlignment: Text.AlignVCenter
+                                                }
+                                                background: Rectangle {
+                                                    radius: 7
+                                                    color: window.actionButtonFill(parent, "#22352c", "#1b252e")
+                                                    border.color: parent.hovered ? "#9dd565" : window.line
+                                                    Behavior on color { ColorAnimation { duration: 100 } }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -566,7 +820,7 @@ ApplicationWindow {
                                                 text: "Retry screen capture"
                                                 onClicked: screenRecorder.startBuffering()
                                                 contentItem: Label { text: parent.text; color: window.ink; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                                background: Rectangle { radius: 9; color: "#202833"; border.color: window.line }
+                                                background: Rectangle { radius: 9; color: window.actionButtonFill(parent, "#202833", "#202833"); border.color: parent.hovered ? "#627282" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
                                             }
                                             Button {
                                                 implicitHeight: 40; leftPadding: 14; rightPadding: 14
@@ -575,7 +829,7 @@ ApplicationWindow {
                                                 text: screenRecorder.replayExporting ? "Saving…" : "Save last " + Math.min(recordingPreferences.effectiveReplayClipSeconds, screenRecorder.bufferedSeconds) + " sec"
                                                 onClicked: screenRecorder.saveReplayClip(recordingPreferences.effectiveReplayClipSeconds)
                                                 contentItem: Label { text: parent.text; color: window.ink; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                                background: Rectangle { radius: 10; color: parent.enabled ? "#2e4934" : "#202d36"; border.color: parent.enabled ? "#55734a" : window.line }
+                                                background: Rectangle { radius: 10; color: window.actionButtonFill(parent, "#2e4934", "#202d36"); border.color: parent.hovered ? "#8dbb62" : parent.enabled ? "#55734a" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
                                             }
                                             Button {
                                                 implicitHeight: 40; leftPadding: 14; rightPadding: 14
@@ -583,7 +837,7 @@ ApplicationWindow {
                                                 text: "Screenshot"
                                                 onClicked: screenRecorder.saveScreenshot()
                                                 contentItem: Label { text: parent.text; color: window.ink; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                                background: Rectangle { radius: 9; color: parent.enabled ? "#202833" : "#1a2029"; border.color: window.line }
+                                                background: Rectangle { radius: 9; color: window.actionButtonFill(parent, "#202833", "#1a2029"); border.color: parent.hovered ? "#627282" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
                                             }
                                             Button {
                                                 implicitHeight: 40; leftPadding: 14; rightPadding: 14
@@ -591,7 +845,7 @@ ApplicationWindow {
                                                 enabled: screenRecorder.buffering
                                                 onClicked: screenRecorder.stopCapture()
                                                 contentItem: Label { text: parent.text; color: window.ink; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                                background: Rectangle { radius: 9; color: "#202833"; border.color: window.line }
+                                                background: Rectangle { radius: 9; color: window.actionButtonFill(parent, "#202833", "#202833"); border.color: parent.hovered ? "#627282" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
                                             }
                                         }
                                     }
@@ -632,7 +886,7 @@ ApplicationWindow {
                                             text: "Start session recording"
                                             onClicked: screenRecorder.startRecording()
                                             contentItem: Label { text: parent.text; color: "#172111"; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                            background: Rectangle { radius: 9; color: parent.enabled ? window.accent : "#53604b" }
+                                            background: Rectangle { radius: 9; color: window.actionButtonFill(parent, window.accent, "#53604b"); Behavior on color { ColorAnimation { duration: 100 } } }
                                         }
                                         Button {
                                             implicitHeight: 40; leftPadding: 14; rightPadding: 14
@@ -640,7 +894,7 @@ ApplicationWindow {
                                             text: "Finish and save"
                                             onClicked: screenRecorder.stopRecording()
                                             contentItem: Label { text: parent.text; color: window.ink; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                            background: Rectangle { radius: 9; color: "#293846"; border.color: window.line }
+                                            background: Rectangle { radius: 9; color: window.actionButtonFill(parent, "#293846", "#293846"); border.color: parent.hovered ? "#627889" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
                                         }
                                     }
                                 }
@@ -712,7 +966,7 @@ ApplicationWindow {
                                             if (gameMonitor.addProfile(process)) selectedGameProcess = ""
                                         }
                                         contentItem: Label { text: parent.text; color: parent.enabled ? "#172111" : window.muted; font.pixelSize: 10; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                        background: Rectangle { radius: 7; color: parent.enabled ? window.accent : "#26313e"; border.color: parent.enabled ? "#9ecb61" : window.line }
+                                        background: Rectangle { radius: 7; color: window.actionButtonFill(parent, window.accent, "#26313e"); border.color: parent.hovered ? "#ddffb2" : parent.enabled ? "#9ecb61" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
                                     }
                                 }
                                 RowLayout {
@@ -730,7 +984,7 @@ ApplicationWindow {
                                             if (gameMonitor.addProfile(manualGameProcess.trim())) manualGameProcess = ""
                                         }
                                         contentItem: Label { text: parent.text; color: parent.enabled ? "#172111" : window.muted; font.pixelSize: 10; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                        background: Rectangle { radius: 7; color: parent.enabled ? window.accent : "#26313e"; border.color: parent.enabled ? "#9ecb61" : window.line }
+                                        background: Rectangle { radius: 7; color: window.actionButtonFill(parent, window.accent, "#26313e"); border.color: parent.hovered ? "#ddffb2" : parent.enabled ? "#9ecb61" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
                                     }
                                 }
                                 Label {
@@ -808,6 +1062,84 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     text: "Add a running game above to create its first profile."
                                     color: window.muted; font.pixelSize: 11
+                                }
+                            }
+                        }
+                        Surface {
+                            Layout.fillWidth: true
+                            implicitHeight: discordPresenceColumn.implicitHeight + 44
+                            ColumnLayout {
+                                id: discordPresenceColumn
+                                anchors.fill: parent; anchors.margins: 22; spacing: 12
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 4
+                                        SectionTitle { text: "DISCORD" }
+                                        Label { text: "Game presence runs automatically"; color: window.ink; font.pixelSize: 14; font.bold: true }
+                                    }
+                                    MomentSwitch {
+                                        objectName: "discordPresenceToggle"
+                                        text: checked ? "Sharing on" : "Sharing off"
+                                        checked: discordPresence.enabled
+                                        onToggled: discordPresence.setEnabled(checked)
+                                    }
+                                }
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: discordPresence.activeGameName.length
+                                        ? "Discord activity: Jogando " + discordPresence.activeGameName + " com Moment"
+                                        : "Discord activity: Moment aberto"
+                                    color: discordPresence.activeGameName.length ? window.accent : window.muted
+                                    font.pixelSize: 11; wrapMode: Text.Wrap
+                                }
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: discordPresence.status
+                                    color: discordPresence.connected ? window.accent : window.muted
+                                    font.pixelSize: 10; wrapMode: Text.Wrap
+                                }
+                            }
+                        }
+                        Surface {
+                            id: shareSettingsCard
+                            objectName: "shareSettingsCard"
+                            Layout.fillWidth: true
+                            implicitHeight: shareSettingsColumn.implicitHeight + 44
+                            color: window.shareSettingsHighlighted ? "#1c2a2b" : window.panel
+                            border.width: window.shareSettingsHighlighted ? 2 : 1
+                            border.color: window.shareSettingsHighlighted ? window.accent : window.line
+                            Behavior on border.color { ColorAnimation { duration: 160 } }
+                            Behavior on color { ColorAnimation { duration: 160 } }
+                            ColumnLayout {
+                                id: shareSettingsColumn
+                                anchors.fill: parent; anchors.margins: 22; spacing: 10
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    SectionTitle { text: "CLIP SHARING" }
+                                    Item { Layout.fillWidth: true }
+                                    Button {
+                                        visible: driveShare.connected
+                                        text: "Disconnect"
+                                        onClicked: driveShare.disconnectAccount()
+                                        contentItem: Label { text: parent.text; color: window.ink; font.pixelSize: 10; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                        background: Rectangle { radius: 7; color: window.actionButtonFill(parent, "#1b252e", "#1b252e"); border.color: parent.hovered ? "#627889" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
+                                    }
+                                }
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: driveShare.connected
+                                        ? "Google Drive is connected. Sharing uploads a clip to your account and creates a link anyone with it can open."
+                                        : driveShare.configured
+                                            ? "Your first share opens Google sign-in once. After approval, Moment uploads clips and copies each link automatically."
+                                            : "Automatic sharing is ready in the app; the Moment Google OAuth registration must be configured before sign-in can start."
+                                    color: window.muted; font.pixelSize: 11; wrapMode: Text.Wrap
+                                }
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: driveShare.statusMessage
+                                    color: driveShare.connected ? window.accent : window.muted
+                                    font.pixelSize: 10; wrapMode: Text.Wrap
                                 }
                             }
                         }
@@ -925,7 +1257,7 @@ ApplicationWindow {
                                     enabled: globalShortcuts.portalAvailable && !globalShortcuts.requesting && !globalShortcuts.allRegistered
                                     onClicked: globalShortcuts.requestCaptureShortcuts()
                                     contentItem: Label { text: parent.text; color: parent.enabled ? "#172111" : window.muted; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                                    background: Rectangle { radius: 9; color: parent.enabled ? window.accent : "#26313e" }
+                                    background: Rectangle { radius: 9; color: window.actionButtonFill(parent, window.accent, "#26313e"); Behavior on color { ColorAnimation { duration: 100 } } }
                                 }
                             }
                         }
@@ -933,11 +1265,165 @@ ApplicationWindow {
                     }
                     }
                 }
+
+                // Editor
+                Item {
+                    ColumnLayout {
+                        anchors.fill: parent
+                        spacing: 16
+                        RowLayout {
+                            Layout.fillWidth: true
+                            ColumnLayout {
+                                spacing: 4
+                                Label { text: "Clip editor"; color: window.ink; font.pixelSize: 25; font.weight: Font.DemiBold; font.letterSpacing: -0.6 }
+                                Label { text: "Trim a copy of your video. The original file stays untouched."; color: window.muted; font.pixelSize: 11 }
+                            }
+                            Item { Layout.fillWidth: true }
+                            Button {
+                                text: "Back to Library"; implicitHeight: 36; leftPadding: 12; rightPadding: 12
+                                onClicked: window.page = 0
+                                contentItem: Label { text: parent.text; color: window.ink; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                background: Rectangle { radius: 8; color: window.actionButtonFill(parent, "#1b2934", "#1b2934"); border.color: parent.hovered ? "#627889" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
+                            }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 280; spacing: 15
+                            Surface {
+                                Layout.fillWidth: true; Layout.fillHeight: true
+                                ColumnLayout {
+                                    anchors.fill: parent; anchors.margins: 16; spacing: 12
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        SectionTitle { text: "PREVIEW" }
+                                        Item { Layout.fillWidth: true }
+                                        Label { text: player.playbackState === MediaPlayer.PlayingState ? "PLAYING" : "EDITING"; color: player.playbackState === MediaPlayer.PlayingState ? window.accent : window.muted; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
+                                    }
+                                    Rectangle {
+                                        Layout.fillWidth: true; Layout.fillHeight: true; radius: 10; color: "#0b1219"; clip: true
+                                        VideoOutput { id: editorVideoOutput; anchors.fill: parent; fillMode: VideoOutput.PreserveAspectFit }
+                                        Column {
+                                            anchors.centerIn: parent; width: parent.width - 36; spacing: 10
+                                            visible: videoEditor.sourcePath.length === 0
+                                            Label { width: parent.width; text: "Choose a video from Library"; color: window.ink; font.pixelSize: 15; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter }
+                                            Label { width: parent.width; text: "Select a clip, then use Edit clip to set the section you want to keep."; color: window.muted; font.pixelSize: 11; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter }
+                                            Button {
+                                                objectName: "editorEmptyChooseButton"
+                                                anchors.horizontalCenter: parent.horizontalCenter
+                                                text: "Choose a video"
+                                                implicitHeight: 36; leftPadding: 15; rightPadding: 15
+                                                onClicked: editorVideoDialog.open()
+                                                contentItem: Label { text: parent.text; color: "#182111"; font.pixelSize: 11; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                                background: Rectangle { radius: 8; color: window.actionButtonFill(parent, window.accent, window.accent); Behavior on color { ColorAnimation { duration: 100 } } }
+                                            }
+                                        }
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true; spacing: 10
+                                        ToolButton {
+                                            text: player.playbackState === MediaPlayer.PlayingState ? "Ⅱ" : "▶"
+                                            enabled: videoEditor.durationMs > 0
+                                            onClicked: {
+                                                if (player.playbackState === MediaPlayer.PlayingState) player.pause()
+                                                else {
+                                                    if (player.position < videoEditor.inMs || player.position >= videoEditor.outMs)
+                                                        player.position = videoEditor.inMs
+                                                    player.play()
+                                                }
+                                            }
+                                            palette.buttonText: window.accent
+                                        }
+                                        MomentSlider { Layout.fillWidth: true; from: 0; to: Math.max(videoEditor.durationMs, 1); value: Math.min(player.position, to); enabled: videoEditor.durationMs > 0; onMoved: player.position = value }
+                                        Label { text: window.formatTime(videoEditor.durationMs > 0 ? player.position : 0) + " / " + window.formatTime(videoEditor.durationMs); color: window.muted; font.pixelSize: 10 }
+                                    }
+                                }
+                            }
+                            Surface {
+                                Layout.preferredWidth: window.width < 1100 ? 250 : 285; Layout.fillHeight: true
+                                ColumnLayout {
+                                    anchors.fill: parent; anchors.margins: 18; spacing: 14
+                                    SectionTitle { text: "CURRENT CUT" }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        ColumnLayout {
+                                            spacing: 3
+                                            Label { text: "IN"; color: window.muted; font.pixelSize: 9; font.bold: true }
+                                            Label { text: window.formatTime(videoEditor.inMs); color: window.accent; font.pixelSize: 15; font.bold: true }
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        ColumnLayout {
+                                            spacing: 3
+                                            Label { text: "OUT"; color: window.muted; font.pixelSize: 9; font.bold: true }
+                                            Label { text: window.formatTime(videoEditor.outMs); color: window.accent; font.pixelSize: 15; font.bold: true }
+                                        }
+                                    }
+                                    SectionTitle { text: "EXPORT PROFILE" }
+                                    SettingCombo {
+                                        objectName: "editorExportPreset"
+                                        Layout.fillWidth: true
+                                        model: ["Compact · smallest file", "Balanced", "High quality", "Maximum · largest file"]
+                                        currentIndex: videoEditor.exportPreset
+                                        onActivated: videoEditor.setExportPreset(currentIndex)
+                                    }
+                                    Label {
+                                        Layout.fillWidth: true
+                                        text: videoEditor.exportPresetDescription
+                                        color: window.muted; font.pixelSize: 9; wrapMode: Text.Wrap
+                                    }
+                                    Rectangle { Layout.fillWidth: true; height: 1; color: window.line }
+                                    Label { text: "Kept section"; color: window.muted; font.pixelSize: 10 }
+                                    Label { text: window.formatTime(Math.max(0, videoEditor.outMs - videoEditor.inMs)); color: window.ink; font.pixelSize: 24; font.bold: true }
+                                    Label { Layout.fillWidth: true; text: "Drag either handle on the timeline. Save changes replaces the Library entry; the original stays on disk."; color: window.muted; font.pixelSize: 10; wrapMode: Text.Wrap }
+                                    Label { Layout.fillWidth: true; text: videoEditor.statusMessage; color: window.muted; font.pixelSize: 10; wrapMode: Text.Wrap; maximumLineCount: 3; elide: Text.ElideRight }
+                                    MomentProgress { Layout.fillWidth: true; visible: videoEditor.exporting; from: 0; to: 100; value: videoEditor.exportProgress }
+                                    Item { Layout.fillHeight: true }
+                                    Button {
+                                        Layout.fillWidth: true; implicitHeight: 46
+                                        enabled: videoEditor.sourcePath.length > 0 && videoEditor.durationMs > 0 && videoEditor.outMs > videoEditor.inMs && !videoEditor.exporting
+                                        text: videoEditor.exporting ? "Saving " + videoEditor.exportProgress + "%…" : "Save changes"
+                                        onClicked: videoEditor.exportClip()
+                                        contentItem: Label { text: parent.text; color: parent.enabled ? "#182111" : window.muted; font.pixelSize: 12; font.weight: Font.Bold; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                        background: Rectangle { radius: 8; color: window.actionButtonFill(parent, window.accent, "#26313e"); Behavior on color { ColorAnimation { duration: 100 } } }
+                                    }
+                                    Button {
+                                        Layout.fillWidth: true; visible: videoEditor.exporting; implicitHeight: 34
+                                        text: "Cancel save"; onClicked: videoEditor.cancelExport()
+                                        contentItem: Label { text: parent.text; color: "#e7aa9b"; font.pixelSize: 10; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                        background: Rectangle { radius: 8; color: window.actionButtonFill(parent, "#2e2425", "#2e2425"); Behavior on color { ColorAnimation { duration: 100 } } }
+                                    }
+                                }
+                            }
+                        }
+                        Surface {
+                            Layout.fillWidth: true; Layout.preferredHeight: 112
+                            visible: videoEditor.sourcePath.length > 0
+                            ColumnLayout {
+                                anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; anchors.topMargin: 9; anchors.bottomMargin: 7; spacing: 0
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    SectionTitle { text: "TIMELINE" }
+                                    Item { Layout.fillWidth: true }
+                                    Label { text: "One video track"; color: window.muted; font.pixelSize: 9 }
+                                }
+                                EditorTrimTimeline {
+                                    Layout.fillWidth: true
+                                    durationMs: videoEditor.durationMs
+                                    inMs: videoEditor.inMs
+                                    outMs: videoEditor.outMs
+                                    playheadMs: player.position
+                                    editingEnabled: videoEditor.durationMs > 0 && !videoEditor.exporting
+                                    onTrimStartRequested: function(positionMs) { videoEditor.inMs = positionMs }
+                                    onTrimEndRequested: function(positionMs) { videoEditor.outMs = positionMs }
+                                    onSeekRequested: function(positionMs) { player.position = positionMs }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             Label {
                 Layout.fillWidth: true
-                text: screenRecorder.statusMessage.length ? screenRecorder.statusMessage : clipLibrary.statusMessage
+                text: window.page === 3 ? videoEditor.statusMessage : screenRecorder.statusMessage.length ? screenRecorder.statusMessage : clipLibrary.statusMessage
                 color: window.muted; font.pixelSize: 10; elide: Text.ElideRight
             }
         }

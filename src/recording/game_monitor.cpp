@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QMap>
 #include <QRegularExpression>
 #include <QSet>
 #include <QVariant>
@@ -20,6 +21,49 @@ constexpr const char *kGamePathMarkers[] = {
 QString canonicalProcessName(const QString &name)
 {
     return QFileInfo(name.trimmed()).fileName().toCaseFolded();
+}
+
+QString launcherDisplayName(const QString &processName, const QString &executablePath,
+                            const QString &commandLine)
+{
+    const QString name = QFileInfo(processName).fileName().toCaseFolded();
+    const QString executable = QFileInfo(executablePath).fileName().toCaseFolded();
+    const QString arguments = commandLine.toCaseFolded();
+    const auto hasName = [&](const QStringList &aliases) {
+        return aliases.contains(name) || aliases.contains(executable);
+    };
+
+    if (hasName({QStringLiteral("steam"), QStringLiteral("steam.exe"),
+                 QStringLiteral("steamwebhelper"), QStringLiteral("steamwebhelper.exe")}))
+        return QStringLiteral("Steam");
+    if (hasName({QStringLiteral("heroic"), QStringLiteral("heroic.exe"),
+                 QStringLiteral("heroic-games-launcher")})
+        || arguments.contains(QStringLiteral("com.heroicgameslauncher.hgl")))
+        return QStringLiteral("Heroic");
+    if (hasName({QStringLiteral("lutris"), QStringLiteral("lutris-wrapper"),
+                 QStringLiteral("net.lutris.lutris")})
+        || arguments.contains(QStringLiteral("/lutris")))
+        return QStringLiteral("Lutris");
+    if (hasName({QStringLiteral("galaxyclient.exe"), QStringLiteral("galaxyclientservice.exe"),
+                 QStringLiteral("goggalaxy.exe")}))
+        return QStringLiteral("GOG Galaxy");
+    if (hasName({QStringLiteral("epicgameslauncher.exe"), QStringLiteral("epicgameslauncher"),
+                 QStringLiteral("legendary.exe"), QStringLiteral("legendary")}))
+        return QStringLiteral("Epic Games");
+    if (hasName({QStringLiteral("itch"), QStringLiteral("itch.exe")}))
+        return QStringLiteral("itch.io");
+    if (hasName({QStringLiteral("battle.net.exe"), QStringLiteral("battle.net"),
+                 QStringLiteral("agent.exe")}))
+        return QStringLiteral("Battle.net");
+    if (hasName({QStringLiteral("eadesktop.exe"), QStringLiteral("ealauncher.exe"),
+                 QStringLiteral("eaapp.exe")}))
+        return QStringLiteral("EA app");
+    if (hasName({QStringLiteral("upc.exe"), QStringLiteral("ubisoftconnect.exe"),
+                 QStringLiteral("ubisoftconnect")}))
+        return QStringLiteral("Ubisoft Connect");
+    if (hasName({QStringLiteral("gamingapp.exe")}))
+        return QStringLiteral("Xbox");
+    return {};
 }
 }
 
@@ -83,6 +127,11 @@ QString GameMonitor::activeProcessName() const
 QStringList GameMonitor::runningGameCandidates() const
 {
     return m_runningGameCandidates;
+}
+
+QString GameMonitor::presenceTargetName() const
+{
+    return m_presenceTargetName;
 }
 
 int GameMonitor::profileCount() const
@@ -252,8 +301,16 @@ void GameMonitor::scanProcesses()
             ? comm : executableName;
         const QString gameName = gamePath ? cleanGameName(executablePath, executableName)
                                           : QFileInfo(processName).completeBaseName();
-        processes.append({processName, executablePath, gameName});
-        if (gamePath || comm.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive)) {
+        QFile commandLineFile(processDirectory + QStringLiteral("/cmdline"));
+        QString commandLine;
+        if (commandLineFile.open(QIODevice::ReadOnly)) {
+            QByteArray commandBytes = commandLineFile.readAll();
+            commandBytes.replace('\0', ' ');
+            commandLine = QString::fromLocal8Bit(commandBytes).trimmed();
+        }
+        const bool gameCandidate = gamePath || comm.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive);
+        processes.append({processName, executablePath, gameName, commandLine, gameCandidate});
+        if (gameCandidate) {
             const QString candidateKey = canonicalProcessName(processName);
             if (!seenCandidates.contains(candidateKey)) {
                 seenCandidates.insert(candidateKey);
@@ -291,24 +348,73 @@ void GameMonitor::scanProcesses()
             break;
     }
 
-    if (activeName == m_activeGameName && activeProcess == m_activeProcessName)
-        return;
-    m_activeGameName = activeName;
-    m_activeProcessName = activeProcess;
-    emit activeGameChanged();
-    emit activeProfileChanged(profileMap(activeProfile));
+    if (activeName != m_activeGameName || activeProcess != m_activeProcessName) {
+        m_activeGameName = activeName;
+        m_activeProcessName = activeProcess;
+        emit activeGameChanged();
+        emit activeProfileChanged(profileMap(activeProfile));
+    }
+
+    QString presenceTarget = m_activeGameName;
+    if (presenceTarget.isEmpty()) {
+        QMap<QString, QString> detectedGames;
+        QSet<QString> launchers;
+        for (const ProcessInfo &process : std::as_const(m_processes)) {
+            const QString launcher = launcherDisplayName(process.name, process.executablePath,
+                                                          process.commandLine);
+            if (!launcher.isEmpty()) {
+                launchers.insert(launcher);
+                continue;
+            }
+            if (process.gameCandidate) {
+                const QString key = process.gameName.toCaseFolded();
+                if (!key.isEmpty())
+                    detectedGames.insert(key, process.gameName);
+            }
+        }
+
+        if (detectedGames.size() == 1) {
+            presenceTarget = detectedGames.constBegin().value();
+        } else if (detectedGames.isEmpty()) {
+            const QStringList launcherPriority{
+                QStringLiteral("Steam"), QStringLiteral("Heroic"), QStringLiteral("Lutris"),
+                QStringLiteral("GOG Galaxy"), QStringLiteral("Epic Games"),
+                QStringLiteral("itch.io"), QStringLiteral("Battle.net"),
+                QStringLiteral("EA app"), QStringLiteral("Ubisoft Connect"), QStringLiteral("Xbox")
+            };
+            for (const QString &launcher : launcherPriority) {
+                if (launchers.contains(launcher)) {
+                    presenceTarget = launcher;
+                    break;
+                }
+            }
+        }
+    }
+    if (presenceTarget != m_presenceTargetName) {
+        m_presenceTargetName = presenceTarget;
+        emit presenceTargetChanged();
+    }
 }
 
 QString GameMonitor::cleanGameName(const QString &path, const QString &executable)
 {
     const QString lowerPath = path.toCaseFolded();
-    const QString marker = QStringLiteral("/steamapps/common/");
-    const qsizetype markerIndex = lowerPath.indexOf(marker);
-    if (markerIndex >= 0) {
+    const QStringList markers{QStringLiteral("/steamapps/common/"), QStringLiteral("/lutris/"),
+                              QStringLiteral("/heroic/"), QStringLiteral("/games/"),
+                              QStringLiteral("/gog/")};
+    for (const QString &marker : markers) {
+        const qsizetype markerIndex = lowerPath.indexOf(marker);
+        if (markerIndex < 0)
+            continue;
         const QString tail = path.mid(markerIndex + marker.size());
-        const QString folder = tail.section('/', 0, 0);
-        if (!folder.isEmpty())
+        const QStringList folders = tail.split('/', Qt::SkipEmptyParts);
+        for (const QString &folder : folders) {
+            const QString key = folder.toCaseFolded();
+            if (key == QStringLiteral("heroic") || key == QStringLiteral("lutris")
+                || key == QStringLiteral("gog") || key == QStringLiteral("games"))
+                continue;
             return folder;
+        }
     }
     return QFileInfo(executable).completeBaseName();
 }

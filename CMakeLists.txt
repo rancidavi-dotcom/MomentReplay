@@ -1,14 +1,19 @@
 cmake_minimum_required(VERSION 3.21)
 project(medal_linux VERSION 0.1.0 LANGUAGES CXX)
 
+set(MOMENT_DISCORD_APPLICATION_ID "1565077771309555864" CACHE STRING "Public Discord application ID for Rich Presence")
+set(MOMENT_GOOGLE_OAUTH_CLIENT_ID "" CACHE STRING "Google OAuth desktop client ID for Drive sharing")
+set(MOMENT_GOOGLE_OAUTH_CLIENT_SECRET "" CACHE STRING "Google OAuth desktop client secret for this local build")
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 Multimedia Concurrent DBus Test)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 Multimedia Concurrent DBus Network Test)
 find_package(SQLite3 REQUIRED)
+find_package(Qt6Keychain REQUIRED)
 find_package(LayerShellQt 6.6 QUIET)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
@@ -17,10 +22,16 @@ qt_standard_project_setup(REQUIRES 6.8)
 
 qt_add_executable(medal-linux
     src/main.cpp
+    src/editor/video_editor.cpp
+    src/editor/video_editor.h
+    src/share/google_drive_share.cpp
+    src/share/google_drive_share.h
     src/desktop/tray_controller.cpp
     src/desktop/tray_controller.h
     src/desktop/capture_popup.cpp
     src/desktop/capture_popup.h
+    src/desktop/discord_presence.cpp
+    src/desktop/discord_presence.h
     src/library/clip_repository.cpp
     src/library/clip_repository.h
     src/library/clip_library_model.cpp
@@ -63,9 +74,26 @@ target_link_libraries(medal-linux PRIVATE
     Qt6::Multimedia
     Qt6::Concurrent
     Qt6::DBus
+    Qt6::Network
+    Qt6Keychain::Qt6Keychain
     PkgConfig::GSTREAMER
     SQLite3::SQLite3
 )
+
+if(NOT MOMENT_DISCORD_APPLICATION_ID STREQUAL "")
+    target_compile_definitions(medal-linux PRIVATE
+        "MOMENT_DISCORD_APPLICATION_ID=\"${MOMENT_DISCORD_APPLICATION_ID}\"")
+endif()
+
+if(NOT MOMENT_GOOGLE_OAUTH_CLIENT_ID STREQUAL "")
+    target_compile_definitions(medal-linux PRIVATE
+        "MOMENT_GOOGLE_OAUTH_CLIENT_ID=\"${MOMENT_GOOGLE_OAUTH_CLIENT_ID}\"")
+endif()
+
+if(NOT MOMENT_GOOGLE_OAUTH_CLIENT_SECRET STREQUAL "")
+    target_compile_definitions(medal-linux PRIVATE
+        "MOMENT_GOOGLE_OAUTH_CLIENT_SECRET=\"${MOMENT_GOOGLE_OAUTH_CLIENT_SECRET}\"")
+endif()
 
 target_compile_options(medal-linux PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic>
@@ -79,6 +107,8 @@ include(CTest)
 if(BUILD_TESTING)
     qt_add_executable(main-window-visual-test
         tests/main_window_visual_test.cpp
+        src/editor/video_editor.cpp src/editor/video_editor.h
+        src/share/google_drive_share.cpp src/share/google_drive_share.h
         src/recording/game_monitor.cpp src/recording/game_monitor.h
         src/library/clip_repository.cpp src/library/clip_repository.h
         src/library/clip_library_model.cpp src/library/clip_library_model.h
@@ -89,9 +119,16 @@ if(BUILD_TESTING)
     qt_add_resources(main-window-visual-test main_visual_qml PREFIX "/qt/qml/MedalLinux" FILES qml/Main.qml)
     qt_add_resources(main-window-visual-test moment_visual_icons PREFIX "/icons" FILES packaging/io.moment.Moment.svg)
     target_include_directories(main-window-visual-test PRIVATE src)
-    target_link_libraries(main-window-visual-test PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Multimedia Qt6::Concurrent Qt6::DBus Qt6::Test SQLite3::SQLite3 PkgConfig::GSTREAMER)
+    target_link_libraries(main-window-visual-test PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Multimedia Qt6::Concurrent Qt6::DBus Qt6::Network Qt6Keychain::Qt6Keychain Qt6::Test SQLite3::SQLite3 PkgConfig::GSTREAMER)
     add_test(NAME main-window-visual-test COMMAND main-window-visual-test)
     set_tests_properties(main-window-visual-test PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+
+    qt_add_executable(google-drive-share-test
+        tests/google_drive_share_test.cpp
+        src/share/google_drive_share.cpp src/share/google_drive_share.h)
+    target_include_directories(google-drive-share-test PRIVATE src)
+    target_link_libraries(google-drive-share-test PRIVATE Qt6::Core Qt6::Gui Qt6::Network Qt6::Test Qt6Keychain::Qt6Keychain)
+    add_test(NAME google-drive-share-test COMMAND google-drive-share-test)
 
     find_program(DBUS_RUN_SESSION dbus-run-session REQUIRED)
     qt_add_executable(global-shortcuts-test
@@ -192,6 +229,28 @@ if(BUILD_TESTING)
     )
     target_link_libraries(game-monitor-test PRIVATE Qt6::Core Qt6::Test)
     add_test(NAME game-monitor-test COMMAND game-monitor-test)
+
+    qt_add_executable(discord-presence-test
+        tests/discord_presence_test.cpp
+        src/desktop/discord_presence.cpp src/desktop/discord_presence.h
+        src/recording/game_monitor.cpp src/recording/game_monitor.h
+    )
+    target_link_libraries(discord-presence-test PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+    if(NOT MOMENT_DISCORD_APPLICATION_ID STREQUAL "")
+        target_compile_definitions(discord-presence-test PRIVATE
+            "MOMENT_DISCORD_APPLICATION_ID=\"${MOMENT_DISCORD_APPLICATION_ID}\"")
+    endif()
+    add_test(NAME discord-presence-test COMMAND discord-presence-test)
+
+    qt_add_executable(video-editor-test
+        tests/video_editor_test.cpp
+        src/editor/video_editor.cpp src/editor/video_editor.h
+        src/library/clip_repository.cpp src/library/clip_repository.h
+        src/library/clip_library_model.cpp src/library/clip_library_model.h
+    )
+    target_include_directories(video-editor-test PRIVATE src)
+    target_link_libraries(video-editor-test PRIVATE Qt6::Core Qt6::Test SQLite3::SQLite3)
+    add_test(NAME video-editor-test COMMAND video-editor-test)
 
     qt_add_executable(instant-replay-test
         tests/instant_replay_test.cpp

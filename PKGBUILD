@@ -5,7 +5,7 @@ pkgdesc='Native Linux instant replay, capture and clip library'
 arch=('x86_64')
 url='https://github.com/rancidavi-dotcom/MomentReplay'
 license=('MIT')
-depends=('qt6-base' 'qt6-declarative' 'qt6-multimedia' 'gstreamer' 'gst-plugins-base' 'gst-plugin-pipewire' 'sqlite')
+depends=('qt6-base' 'qt6-declarative' 'qt6-multimedia' 'qtkeychain-qt6' 'gstreamer' 'gst-plugins-base' 'gst-plugin-pipewire' 'sqlite' 'ffmpeg')
 makedepends=('cmake' 'git' 'pkgconf')
 optdepends=('layer-shell-qt: native layer-shell integration when available')
 source=("$pkgname::git+https://github.com/rancidavi-dotcom/MomentReplay.git#branch=main")

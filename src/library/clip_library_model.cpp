@@ -91,6 +91,39 @@ void ClipLibraryModel::importFile(const QString &path)
     setStatusMessage(QStringLiteral("Clip added to this library"));
 }
 
+bool ClipLibraryModel::replaceWithFile(const QString &originalPath, const QString &replacementPath,
+                                       QString *error)
+{
+    QString localError;
+    const qint64 replacementId = m_repository.importFile(replacementPath, &localError);
+    if (replacementId == 0) {
+        if (error)
+            *error = localError;
+        emit operationFailed(localError);
+        return false;
+    }
+
+    const QFileInfo originalInfo(originalPath);
+    const QString canonicalOriginal = originalInfo.canonicalFilePath().isEmpty()
+        ? originalInfo.absoluteFilePath() : originalInfo.canonicalFilePath();
+    const auto original = std::find_if(m_records.cbegin(), m_records.cend(),
+                                       [&canonicalOriginal](const ClipRecord &record) {
+        return record.path == canonicalOriginal;
+    });
+    if (original != m_records.cend() && original->id != replacementId
+        && !m_repository.removeFromLibrary(original->id, &localError)) {
+        if (error)
+            *error = localError;
+        reload();
+        emit operationFailed(localError);
+        return false;
+    }
+
+    reload();
+    setStatusMessage(QStringLiteral("Edited video replaced the Library entry; the original file remains on disk."));
+    return true;
+}
+
 void ClipLibraryModel::removeFromLibrary(qint64 id)
 {
     QString error;
