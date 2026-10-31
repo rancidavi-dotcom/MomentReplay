@@ -59,11 +59,15 @@ jobs:
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
           Remove-Item Env:QT_PLUGIN_PATH, Env:QML2_IMPORT_PATH, Env:QML_IMPORT_PATH -ErrorAction SilentlyContinue
           $exe = Join-Path $PWD 'dist/Moment/Moment.exe'
-          $process = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          $stderr = Join-Path $PWD 'artifacts/packaged-stderr.log'
+          $stdout = Join-Path $PWD 'artifacts/packaged-stdout.log'
+          $process = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru -RedirectStandardError $stderr -RedirectStandardOutput $stdout
           if (-not $process.WaitForExit(30000)) {
             $process.Kill()
             throw 'Packaged Moment did not finish its startup check.'
           }
+          Get-Content $stderr, $stdout
           if ($process.ExitCode -ne 0) { throw "Packaged Moment failed: $($process.ExitCode)" }
       - name: Upload Windows portable folder
         uses: actions/upload-artifact@v4
@@ -71,6 +75,12 @@ jobs:
           name: Moment-Windows-x64
           path: dist/Moment/
           if-no-files-found: error
+      - name: Upload package diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-package-diagnostics
+          path: dist/Moment/
       - name: Upload test reports and screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -78,5 +88,6 @@ jobs:
           name: windows-validation
           path: |
             artifacts/windows-ui/
+            artifacts/packaged-*.log
             build-windows/Testing/Temporary/LastTest.log
             build-windows/Testing/Temporary/LastTestsFailed.log

@@ -10,6 +10,14 @@ fi
 mkdir -p "$destination/licenses"
 cmake --install "$build_dir" --prefix "$PWD/$destination"
 windeployqt6 --release --qmldir "$PWD/qml" "$PWD/$destination/Moment.exe"
+cat > "$destination/qt.conf" <<'EOF'
+[Paths]
+Prefix=.
+Binaries=.
+Libraries=.
+Plugins=.
+QmlImports=qml
+EOF
 cp /ucrt64/bin/ffmpeg.exe /ucrt64/bin/ffprobe.exe "$destination/"
 
 # Resolve transitive MinGW dependencies for the app, FFmpeg and Qt plugins.
