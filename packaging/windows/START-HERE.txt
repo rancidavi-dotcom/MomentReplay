@@ -1,0 +1,21 @@
+Moment for Windows — experimental x64 build
+
+Extract the whole folder, then open Moment.exe. Keep the DLLs, plugins and QML
+folders together with the executable. No MSYS2 installation is needed to run it.
+
+The primary display is captured automatically. Wait until Replay active has a
+few seconds available, then use F8 to save a replay or F9 for a PNG screenshot.
+Change shortcuts under Preferences > In-game control. If a key is already owned
+by another program, choose another combination, for example Ctrl+Shift+F8.
+Closing the window keeps capture running in the system tray. Quit Moment from
+the tray menu to stop it. Videos and screenshots are stored in the Moment
+subdirectories of your Windows Videos and Pictures folders.
+
+This initial Windows port captures a monitor, not an injected game hook.
+Exclusive fullscreen/protected content and overlays require testing on a real
+gaming PC. Audio uses the chosen input device (usually a microphone); automatic
+system-audio loopback/mixing has not been implemented. Drive sharing requires
+an OAuth-configured build and is disabled in the public build.
+
+Report problems: https://github.com/rancidavi-dotcom/MomentReplay/issues
+Include Windows version, GPU/driver, game, display mode and reproduction steps.

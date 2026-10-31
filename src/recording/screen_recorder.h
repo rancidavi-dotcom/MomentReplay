@@ -3,7 +3,13 @@
 #include "../library/clip_library_model.h"
 #include "recording_preferences.h"
 #include "instant_replay.h"
+#ifdef Q_OS_WIN
+#include "windows_screencast.h"
+using DesktopScreenCast = WindowsScreenCast;
+#else
 #include "wayland_screencast.h"
+using DesktopScreenCast = WaylandScreenCast;
+#endif
 
 #include <QMediaCaptureSession>
 #include <QMediaRecorder>
@@ -126,7 +132,7 @@ private:
     QList<QAudioBuffer> m_sessionAudioQueue;
     qsizetype m_sessionAudioQueuedBytes = 0;
     qint64 m_sessionAudioOriginUs = 0;
-    WaylandScreenCast *m_waylandCapture = nullptr;
+    DesktopScreenCast *m_screenCapture = nullptr;
     std::unique_ptr<QVideoFrameInput> m_portalFrameInput;
     QVideoFrameInput *m_videoFrameInput = nullptr;
     State m_state = State::Idle;

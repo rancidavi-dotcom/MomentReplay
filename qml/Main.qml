@@ -41,6 +41,7 @@ ApplicationWindow {
     property color ink: "#f2f5f8"
     property color muted: "#94a6b7"
     property color accent: "#b5ec72"
+    property bool windowsDesktop: Qt.platform.os === "windows"
     property int page: 0
     property url activeSource: ""
     property bool activeIsImage: false
@@ -48,6 +49,38 @@ ApplicationWindow {
     property string selectedGameProcess: ""
     property string manualGameProcess: ""
     property bool shareSettingsHighlighted: false
+
+    Dialog {
+        id: windowsShortcutDialog
+        title: "Capture shortcuts"
+        anchors.centerIn: parent
+        width: Math.min(window.width - 40, 440)
+        modal: true
+        onOpened: {
+            replayShortcutField.text = globalShortcuts.triggerDescription
+            screenshotShortcutField.text = globalShortcuts.screenshotTriggerDescription
+        }
+        contentItem: ColumnLayout {
+            spacing: 12
+            Label { text: "Global keys work while Moment is in the background."; wrapMode: Text.Wrap; Layout.fillWidth: true; color: window.muted }
+            Label { text: "Save replay"; color: window.ink }
+            TextField { id: replayShortcutField; objectName: "windowsReplayShortcutField"; Layout.fillWidth: true; placeholderText: "F8 or Ctrl+Shift+F8" }
+            Label { text: "Take screenshot"; color: window.ink }
+            TextField { id: screenshotShortcutField; Layout.fillWidth: true; placeholderText: "F9 or Ctrl+Shift+F9" }
+            Label { text: globalShortcuts.statusMessage; wrapMode: Text.Wrap; Layout.fillWidth: true; color: window.muted }
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                Button { text: "Cancel"; onClicked: windowsShortcutDialog.close() }
+                Button {
+                    text: "Save shortcuts"
+                    onClicked: {
+                        if (window.windowsDesktop && globalShortcuts.setCaptureShortcuts(replayShortcutField.text, screenshotShortcutField.text))
+                            windowsShortcutDialog.close()
+                    }
+                }
+            }
+        }
+    }
 
     Timer {
         id: shareSettingsHighlightTimer
@@ -1245,17 +1278,24 @@ ApplicationWindow {
                                     Label { text: "Capture with global keys"; color: window.ink; font.pixelSize: 16; font.bold: true }
                                     Label {
                                         Layout.fillWidth: true
-                                        text: globalShortcuts.portalAvailable
-                                            ? globalShortcuts.statusMessage + ". The desktop remembers approved shortcuts for the next launch."
-                                            : "This desktop session does not expose the XDG Global Shortcuts portal."
+                                        text: window.windowsDesktop
+                                            ? globalShortcuts.statusMessage + " · Shortcuts are saved on this device."
+                                            : globalShortcuts.portalAvailable
+                                                ? globalShortcuts.statusMessage + ". The desktop remembers approved shortcuts for the next launch."
+                                                : "This desktop session does not expose the XDG Global Shortcuts portal."
                                         color: window.muted; wrapMode: Text.Wrap; font.pixelSize: 11
                                     }
                                 }
                                 Button {
                                     implicitHeight: 40; leftPadding: 14; rightPadding: 14
-                                    text: globalShortcuts.requesting ? "Restoring shortcuts…" : globalShortcuts.allRegistered ? "Replay " + globalShortcuts.triggerDescription + " · Screenshot " + globalShortcuts.screenshotTriggerDescription : globalShortcuts.registered || globalShortcuts.screenshotRegistered ? "Finish shortcut setup" : "Enable capture shortcuts"
-                                    enabled: globalShortcuts.portalAvailable && !globalShortcuts.requesting && !globalShortcuts.allRegistered
-                                    onClicked: globalShortcuts.requestCaptureShortcuts()
+                                    text: window.windowsDesktop ? "Change shortcuts" : globalShortcuts.requesting ? "Restoring shortcuts…" : globalShortcuts.allRegistered ? "Replay " + globalShortcuts.triggerDescription + " · Screenshot " + globalShortcuts.screenshotTriggerDescription : globalShortcuts.registered || globalShortcuts.screenshotRegistered ? "Finish shortcut setup" : "Enable capture shortcuts"
+                                    enabled: globalShortcuts.portalAvailable && !globalShortcuts.requesting && (window.windowsDesktop || !globalShortcuts.allRegistered)
+                                    onClicked: {
+                                        if (window.windowsDesktop)
+                                            windowsShortcutDialog.open()
+                                        else
+                                            globalShortcuts.requestCaptureShortcuts()
+                                    }
                                     contentItem: Label { text: parent.text; color: parent.enabled ? "#172111" : window.muted; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                     background: Rectangle { radius: 9; color: window.actionButtonFill(parent, window.accent, "#26313e"); Behavior on color { ColorAnimation { duration: 100 } } }
                                 }

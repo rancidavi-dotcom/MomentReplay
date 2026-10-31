@@ -10,7 +10,7 @@
 #include <QUuid>
 #include <QtEndian>
 
-#include <unistd.h>
+#include <QCoreApplication>
 
 namespace {
 constexpr auto kEnabledKey = "discord/richPresenceEnabled";
@@ -139,9 +139,17 @@ void DiscordPresence::tryConnect()
 
     for (const QString &directory : socketDirectories()) {
         for (int index = 0; index < 10; ++index) {
+#ifdef Q_OS_WIN
+            const QString path = m_socketDirectory.isEmpty()
+                ? QStringLiteral("discord-ipc-%1").arg(index)
+                : QDir(directory).filePath(QStringLiteral("discord-ipc-%1").arg(index));
+#else
             const QString path = QDir(directory).filePath(QStringLiteral("discord-ipc-%1").arg(index));
+#endif
+#ifndef Q_OS_WIN
             if (!QFileInfo::exists(path))
                 continue;
+#endif
             m_socket.connectToServer(path, QIODevice::ReadWrite);
             if (m_socket.waitForConnected(120)) {
                 m_reconnectTimer.stop();
@@ -233,7 +241,7 @@ void DiscordPresence::publishActivity()
         };
     }
     const QJsonObject arguments{
-        {QStringLiteral("pid"), qint64(::getpid())},
+        {QStringLiteral("pid"), QCoreApplication::applicationPid()},
         {QStringLiteral("activity"), m_enabled ? QJsonValue(activity) : QJsonValue(QJsonValue::Null)}
     };
     const QJsonObject command{
@@ -266,6 +274,10 @@ void DiscordPresence::sendFrame(quint32 opcode, const QByteArray &payload)
 
 QStringList DiscordPresence::socketDirectories() const
 {
+#ifdef Q_OS_WIN
+    // QLocalSocket maps a bare name to \\.\pipe\ on Windows.
+    return {m_socketDirectory.isEmpty() ? QStringLiteral(".") : m_socketDirectory};
+#else
     QStringList directories;
     if (!m_socketDirectory.isEmpty())
         directories.append(m_socketDirectory);
@@ -280,4 +292,5 @@ QStringList DiscordPresence::socketDirectories() const
     if (!directories.contains(QStringLiteral("/tmp")))
         directories.append(QStringLiteral("/tmp"));
     return directories;
+#endif
 }

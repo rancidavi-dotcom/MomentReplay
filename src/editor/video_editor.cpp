@@ -1,3 +1,4 @@
+#include "../platform/media_tools.h"
 #include "video_editor.h"
 
 #include "../library/clip_library_model.h"
@@ -241,7 +242,7 @@ bool VideoEditor::exportClip()
         setStatusMessage(QStringLiteral("Choose a valid video and trim range before exporting."));
         return false;
     }
-    const QString ffmpeg = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    const QString ffmpeg = momentMediaTool(QStringLiteral("ffmpeg"));
     if (ffmpeg.isEmpty()) {
         const QString message = QStringLiteral("FFmpeg is required to export edited clips.");
         setStatusMessage(message);

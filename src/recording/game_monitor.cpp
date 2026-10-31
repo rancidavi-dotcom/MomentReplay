@@ -12,10 +12,15 @@
 
 #include <algorithm>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <tlhelp32.h>
+#endif
+
 namespace {
 constexpr auto kProfileSettingsKey = "games/profiles";
 constexpr const char *kGamePathMarkers[] = {
-    "/steamapps/common/", "/lutris/", "/heroic/", "/games/", "/gog/"
+    "/steamapps/common/", "/lutris/", "/heroic/", "/games/", "/gog/", "/epic games/", "/gog galaxy/games/"
 };
 
 QString canonicalProcessName(const QString &name)
@@ -278,6 +283,38 @@ void GameMonitor::scanProcesses()
     QList<ProcessInfo> processes;
     QStringList candidates;
     QSet<QString> seenCandidates;
+#ifdef Q_OS_WIN
+    const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE)
+        return; // Keep the last observation if Windows cannot enumerate processes.
+    PROCESSENTRY32W entry{};
+    entry.dwSize = sizeof(entry);
+    if (Process32FirstW(snapshot, &entry)) {
+        do {
+            if (entry.th32ProcessID == GetCurrentProcessId())
+                continue;
+            const QString processName = QString::fromWCharArray(entry.szExeFile);
+            QString executablePath;
+            const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ProcessID);
+            if (process) {
+                wchar_t path[32768];
+                DWORD length = DWORD(std::size(path));
+                if (QueryFullProcessImageNameW(process, 0, path, &length))
+                    executablePath = QDir::fromNativeSeparators(QString::fromWCharArray(path, int(length)));
+                CloseHandle(process);
+            }
+            const bool gameCandidate = looksLikeGame(executablePath);
+            const QString gameName = gameCandidate ? cleanGameName(executablePath, processName)
+                                                   : QFileInfo(processName).completeBaseName();
+            processes.append({processName, executablePath, gameName, {}, gameCandidate});
+            if (gameCandidate && !seenCandidates.contains(canonicalProcessName(processName))) {
+                seenCandidates.insert(canonicalProcessName(processName));
+                candidates.append(processName);
+            }
+        } while (Process32NextW(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+#else
     const QDir procDir(m_procRoot);
     const QStringList entries = procDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     for (const QString &pid : entries) {
@@ -318,6 +355,8 @@ void GameMonitor::scanProcesses()
             }
         }
     }
+
+#endif
 
     std::sort(processes.begin(), processes.end(), [](const ProcessInfo &a, const ProcessInfo &b) {
         return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
@@ -398,10 +437,11 @@ void GameMonitor::scanProcesses()
 
 QString GameMonitor::cleanGameName(const QString &path, const QString &executable)
 {
-    const QString lowerPath = path.toCaseFolded();
+    const QString lowerPath = QDir::fromNativeSeparators(path).toCaseFolded();
     const QStringList markers{QStringLiteral("/steamapps/common/"), QStringLiteral("/lutris/"),
                               QStringLiteral("/heroic/"), QStringLiteral("/games/"),
-                              QStringLiteral("/gog/")};
+                              QStringLiteral("/gog/"), QStringLiteral("/epic games/"),
+                              QStringLiteral("/gog galaxy/games/")};
     for (const QString &marker : markers) {
         const qsizetype markerIndex = lowerPath.indexOf(marker);
         if (markerIndex < 0)
@@ -421,7 +461,7 @@ QString GameMonitor::cleanGameName(const QString &path, const QString &executabl
 
 bool GameMonitor::looksLikeGame(const QString &path)
 {
-    const QString lowerPath = path.toCaseFolded();
+    const QString lowerPath = QDir::fromNativeSeparators(path).toCaseFolded();
     for (const char *marker : kGamePathMarkers) {
         if (lowerPath.contains(QString::fromLatin1(marker)))
             return true;

@@ -11,12 +11,31 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 Multimedia Concurrent DBus Network Test)
+include(CTest)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 Multimedia Concurrent Network)
+if(BUILD_TESTING)
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+endif()
 find_package(SQLite3 REQUIRED)
 find_package(Qt6Keychain REQUIRED)
-find_package(LayerShellQt 6.6 QUIET)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
+# Keep Linux desktop dependencies out of the Windows build.
+add_library(moment-platform INTERFACE)
+if(WIN32)
+    set(MOMENT_SCREEN_SOURCE src/recording/windows_screencast.cpp src/recording/windows_screencast.h)
+    set(MOMENT_SHORTCUT_SOURCE src/recording/windows_shortcuts.cpp src/recording/global_shortcuts.h)
+    target_link_libraries(moment-platform INTERFACE user32)
+    target_compile_definitions(moment-platform INTERFACE NOMINMAX WIN32_LEAN_AND_MEAN _WIN32_WINNT=0x0A00)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_package(Qt6 REQUIRED COMPONENTS DBus)
+    find_package(LayerShellQt 6.6 QUIET)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GSTREAMER REQUIRED IMPORTED_TARGET gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
+    set(MOMENT_SCREEN_SOURCE src/recording/wayland_screencast.cpp src/recording/wayland_screencast.h)
+    set(MOMENT_SHORTCUT_SOURCE src/recording/global_shortcuts.cpp src/recording/global_shortcuts.h)
+    target_link_libraries(moment-platform INTERFACE Qt6::DBus PkgConfig::GSTREAMER)
+else()
+    message(FATAL_ERROR "Moment currently supports Linux and Windows")
+endif()
 
 qt_standard_project_setup(REQUIRES 6.8)
 
@@ -40,14 +59,12 @@ qt_add_executable(medal-linux
     src/recording/screen_recorder.h
     src/recording/instant_replay.cpp
     src/recording/instant_replay.h
-    src/recording/global_shortcuts.cpp
-    src/recording/global_shortcuts.h
+    ${MOMENT_SHORTCUT_SOURCE}
     src/recording/recording_preferences.cpp
     src/recording/recording_preferences.h
     src/recording/game_monitor.cpp
     src/recording/game_monitor.h
-    src/recording/wayland_screencast.cpp
-    src/recording/wayland_screencast.h
+    ${MOMENT_SCREEN_SOURCE}
 )
 
 qt_add_qml_module(medal-linux
@@ -73,10 +90,9 @@ target_link_libraries(medal-linux PRIVATE
     Qt6::QuickControls2
     Qt6::Multimedia
     Qt6::Concurrent
-    Qt6::DBus
     Qt6::Network
     Qt6Keychain::Qt6Keychain
-    PkgConfig::GSTREAMER
+    moment-platform
     SQLite3::SQLite3
 )
 
@@ -99,9 +115,17 @@ target_compile_options(medal-linux PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic>
 )
 
-install(TARGETS medal-linux RUNTIME DESTINATION bin)
-install(FILES packaging/io.moment.Moment.desktop DESTINATION share/applications)
-install(FILES packaging/io.moment.Moment.svg DESTINATION share/icons/hicolor/scalable/apps)
+if(WIN32)
+    enable_language(RC)
+    target_sources(medal-linux PRIVATE packaging/windows/Moment.rc)
+    target_include_directories(medal-linux PRIVATE packaging/windows)
+    set_target_properties(medal-linux PROPERTIES OUTPUT_NAME Moment WIN32_EXECUTABLE TRUE)
+    install(TARGETS medal-linux RUNTIME DESTINATION .)
+else()
+    install(TARGETS medal-linux RUNTIME DESTINATION bin)
+    install(FILES packaging/io.moment.Moment.desktop DESTINATION share/applications)
+    install(FILES packaging/io.moment.Moment.svg DESTINATION share/icons/hicolor/scalable/apps)
+endif()
 
 include(CTest)
 if(BUILD_TESTING)
@@ -115,11 +139,11 @@ if(BUILD_TESTING)
         src/recording/screen_recorder.cpp src/recording/screen_recorder.h
         src/recording/instant_replay.cpp src/recording/instant_replay.h
         src/recording/recording_preferences.cpp src/recording/recording_preferences.h
-        src/recording/wayland_screencast.cpp src/recording/wayland_screencast.h)
+        ${MOMENT_SCREEN_SOURCE})
     qt_add_resources(main-window-visual-test main_visual_qml PREFIX "/qt/qml/MedalLinux" FILES qml/Main.qml)
     qt_add_resources(main-window-visual-test moment_visual_icons PREFIX "/icons" FILES packaging/io.moment.Moment.svg)
     target_include_directories(main-window-visual-test PRIVATE src)
-    target_link_libraries(main-window-visual-test PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Multimedia Qt6::Concurrent Qt6::DBus Qt6::Network Qt6Keychain::Qt6Keychain Qt6::Test SQLite3::SQLite3 PkgConfig::GSTREAMER)
+    target_link_libraries(main-window-visual-test PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Multimedia Qt6::Concurrent Qt6::Network Qt6Keychain::Qt6Keychain Qt6::Test SQLite3::SQLite3 moment-platform)
     add_test(NAME main-window-visual-test COMMAND main-window-visual-test)
     set_tests_properties(main-window-visual-test PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
 
@@ -130,12 +154,13 @@ if(BUILD_TESTING)
     target_link_libraries(google-drive-share-test PRIVATE Qt6::Core Qt6::Gui Qt6::Network Qt6::Test Qt6Keychain::Qt6Keychain)
     add_test(NAME google-drive-share-test COMMAND google-drive-share-test)
 
+    if(NOT WIN32)
     find_program(DBUS_RUN_SESSION dbus-run-session REQUIRED)
     qt_add_executable(global-shortcuts-test
         tests/global_shortcuts_test.cpp
         src/recording/global_shortcuts.cpp src/recording/global_shortcuts.h)
     target_include_directories(global-shortcuts-test PRIVATE src)
-    target_link_libraries(global-shortcuts-test PRIVATE Qt6::Core Qt6::Gui Qt6::DBus Qt6::Test)
+    target_link_libraries(global-shortcuts-test PRIVATE Qt6::Core Qt6::Gui Qt6::Test moment-platform)
     add_test(NAME global-shortcuts-test COMMAND ${DBUS_RUN_SESSION} -- $<TARGET_FILE:global-shortcuts-test>)
     set_tests_properties(global-shortcuts-test PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
@@ -145,14 +170,34 @@ if(BUILD_TESTING)
         src/recording/screen_recorder.cpp src/recording/screen_recorder.h
         src/recording/instant_replay.cpp src/recording/instant_replay.h
         src/recording/recording_preferences.cpp src/recording/recording_preferences.h
-        src/recording/wayland_screencast.cpp src/recording/wayland_screencast.h
+        ${MOMENT_SCREEN_SOURCE}
         src/library/clip_repository.cpp src/library/clip_repository.h
         src/library/clip_library_model.cpp src/library/clip_library_model.h)
     target_include_directories(background-capture-test PRIVATE src)
-    target_link_libraries(background-capture-test PRIVATE Qt6::Core Qt6::Gui Qt6::DBus Qt6::Test
-        Qt6::Multimedia Qt6::Concurrent SQLite3::SQLite3 PkgConfig::GSTREAMER)
+    target_link_libraries(background-capture-test PRIVATE Qt6::Core Qt6::Gui Qt6::Test
+        Qt6::Multimedia Qt6::Concurrent SQLite3::SQLite3 moment-platform)
     add_test(NAME background-capture-test COMMAND ${DBUS_RUN_SESSION} -- $<TARGET_FILE:background-capture-test>)
     set_tests_properties(background-capture-test PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    endif()
+
+    if(WIN32)
+        qt_add_executable(windows-shortcuts-test tests/windows_shortcuts_test.cpp ${MOMENT_SHORTCUT_SOURCE})
+        target_include_directories(windows-shortcuts-test PRIVATE src)
+        target_link_libraries(windows-shortcuts-test PRIVATE Qt6::Core Qt6::Gui Qt6::Test moment-platform)
+        add_test(NAME windows-shortcuts-test COMMAND windows-shortcuts-test)
+        qt_add_executable(windows-capture-test tests/windows_capture_test.cpp
+            src/recording/screen_recorder.cpp src/recording/screen_recorder.h
+            src/recording/instant_replay.cpp src/recording/instant_replay.h
+            src/recording/recording_preferences.cpp src/recording/recording_preferences.h
+            src/library/clip_repository.cpp src/library/clip_repository.h
+            src/library/clip_library_model.cpp src/library/clip_library_model.h
+            ${MOMENT_SCREEN_SOURCE})
+        target_include_directories(windows-capture-test PRIVATE src)
+        target_link_libraries(windows-capture-test PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets
+            Qt6::Multimedia Qt6::Concurrent Qt6::Test SQLite3::SQLite3 moment-platform)
+        add_test(NAME windows-capture-test COMMAND windows-capture-test)
+    endif()
 
     qt_add_executable(capture-popup-test
         tests/capture_popup_test.cpp
@@ -196,14 +241,13 @@ if(BUILD_TESTING)
         src/recording/instant_replay.h
         src/recording/recording_preferences.cpp
         src/recording/recording_preferences.h
-        src/recording/wayland_screencast.cpp
-        src/recording/wayland_screencast.h
+        ${MOMENT_SCREEN_SOURCE}
         src/library/clip_repository.cpp
         src/library/clip_repository.h
         src/library/clip_library_model.cpp
         src/library/clip_library_model.h
     )
-    target_link_libraries(screen-recorder-test PRIVATE Qt6::Core Qt6::Gui Qt6::Multimedia Qt6::Concurrent Qt6::DBus Qt6::Test SQLite3::SQLite3 PkgConfig::GSTREAMER)
+    target_link_libraries(screen-recorder-test PRIVATE Qt6::Core Qt6::Gui Qt6::Multimedia Qt6::Concurrent Qt6::Test SQLite3::SQLite3 moment-platform)
     target_compile_options(screen-recorder-test PRIVATE
         $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall;-Wextra;-Wpedantic>
     )
@@ -222,6 +266,7 @@ if(BUILD_TESTING)
     add_test(NAME recording-preferences-test COMMAND recording-preferences-test)
     set_tests_properties(recording-preferences-test PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+    if(NOT WIN32)
     qt_add_executable(game-monitor-test
         tests/game_monitor_test.cpp
         src/recording/game_monitor.cpp
@@ -241,6 +286,8 @@ if(BUILD_TESTING)
             "MOMENT_DISCORD_APPLICATION_ID=\"${MOMENT_DISCORD_APPLICATION_ID}\"")
     endif()
     add_test(NAME discord-presence-test COMMAND discord-presence-test)
+
+    endif()
 
     qt_add_executable(video-editor-test
         tests/video_editor_test.cpp

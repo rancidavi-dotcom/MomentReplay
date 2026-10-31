@@ -32,8 +32,13 @@ int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
     app.setQuitOnLastWindowClosed(false);
+#ifdef Q_OS_WIN
+    QCoreApplication::setApplicationName(QStringLiteral("Moment"));
+    QCoreApplication::setOrganizationName(QStringLiteral("Moment"));
+#else
     QCoreApplication::setApplicationName(QStringLiteral("medal-linux"));
     QCoreApplication::setOrganizationName(QStringLiteral("MedalLinuxProject"));
+#endif
     QGuiApplication::setDesktopFileName(QStringLiteral("io.moment.Moment"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("Moment"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/io.moment.Moment.svg")));
@@ -73,7 +78,11 @@ int main(int argc, char *argv[])
     GameMonitor gameMonitor(dataDirectory + QStringLiteral("/settings.ini"));
     DiscordPresence discordPresence(gameMonitor, dataDirectory + QStringLiteral("/settings.ini"));
     ScreenRecorder recorder(library, preferences, videoDirectory, screenshotDirectory);
+#ifdef Q_OS_WIN
+    GlobalShortcuts globalShortcuts(dataDirectory + QStringLiteral("/settings.ini"));
+#else
     GlobalShortcuts globalShortcuts;
+#endif
     TrayController trayController;
     QQmlApplicationEngine engine;
     CapturePopup capturePopup(&engine);

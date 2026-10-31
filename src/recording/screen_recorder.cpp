@@ -62,8 +62,8 @@ void ScreenRecorder::initialize()
     m_captureSession.setVideoSink(&m_videoSink);
     const QString tokenPath = QFileInfo(m_preferences.settingsFilePath()).absolutePath()
         + QStringLiteral("/screencast-restore-token");
-    m_waylandCapture = new WaylandScreenCast(tokenPath, this);
-    connect(m_waylandCapture, &WaylandScreenCast::frameReady, this,
+    m_screenCapture = new DesktopScreenCast(tokenPath, this);
+    connect(m_screenCapture, &DesktopScreenCast::frameReady, this,
             [this](const QImage &image, qint64 presentationTimeUs) {
         if (image.isNull())
             return;
@@ -96,12 +96,12 @@ void ScreenRecorder::initialize()
             m_hasPendingPortalFrame = true;
         }
 
-        if (m_recordAfterCapture && m_waylandCapture->active()) {
+        if (m_recordAfterCapture && m_screenCapture->active()) {
             m_recordAfterCapture = false;
             m_mediaRecorder.record();
         }
     });
-    connect(m_waylandCapture, &WaylandScreenCast::activeChanged, this, [this](bool active) {
+    connect(m_screenCapture, &DesktopScreenCast::activeChanged, this, [this](bool active) {
         m_captureActive = active;
         if (active && m_preferences.effectiveCaptureAudio())
             startAudioCapture();
@@ -115,7 +115,7 @@ void ScreenRecorder::initialize()
             setStatusMessage(QStringLiteral("Replay buffer is capturing your screen"));
         }
     });
-    connect(m_waylandCapture, &WaylandScreenCast::failed,
+    connect(m_screenCapture, &DesktopScreenCast::failed,
             this, [this](const QString &message) { fail(message); });
     m_replayBuffer.setBufferSeconds(m_preferences.effectiveReplaySeconds());
     connect(&m_preferences, &RecordingPreferences::replaySecondsChanged, this, [this] {
@@ -126,7 +126,7 @@ void ScreenRecorder::initialize()
 
     connect(&m_videoSink, &QVideoSink::videoFrameChanged, this,
             [this](const QVideoFrame &frame) {
-        if (!m_waylandCapture || !m_waylandCapture->active()) {
+        if (!m_screenCapture || !m_screenCapture->active()) {
             const QImage image = frame.toImage();
             if (!image.isNull())
                 updateLatestFrame(image);
@@ -468,8 +468,12 @@ void ScreenRecorder::startBuffering()
         setStatusMessage(QStringLiteral("Replay buffer is ready for test frames"));
         return;
     }
+    #ifdef Q_OS_WIN
+    setStatusMessage(QStringLiteral("Starting screen capture…"));
+#else
     setStatusMessage(QStringLiteral("Requesting screen access from the desktop…"));
-    m_waylandCapture->start();
+#endif
+    m_screenCapture->start();
 }
 
 void ScreenRecorder::stopCapture()
@@ -485,7 +489,7 @@ void ScreenRecorder::stopCapture()
     }
     if (m_state == State::AwaitingScreenPermission
         && m_mediaRecorder.recorderState() == QMediaRecorder::StoppedState) {
-        m_waylandCapture->stop();
+        m_screenCapture->stop();
         stopAudioCapture();
         m_captureActive = false;
         m_state = State::Idle;
@@ -495,7 +499,7 @@ void ScreenRecorder::stopCapture()
     }
 
     if (!m_videoFrameInput)
-        m_waylandCapture->stop();
+        m_screenCapture->stop();
     stopAudioCapture();
     m_captureActive = false;
     m_state = State::Idle;
@@ -568,8 +572,12 @@ void ScreenRecorder::startRecording()
         m_mediaRecorder.record();
         return;
     }
+    #ifdef Q_OS_WIN
+    setStatusMessage(QStringLiteral("Starting screen capture…"));
+#else
     setStatusMessage(QStringLiteral("Requesting screen access from the desktop…"));
-    m_waylandCapture->start();
+#endif
+    m_screenCapture->start();
 }
 
 void ScreenRecorder::stopRecording()
@@ -676,7 +684,7 @@ void ScreenRecorder::finalizeRecording()
     if (m_stopCaptureRequested) {
         m_stopCaptureRequested = false;
         if (!m_videoFrameInput)
-            m_waylandCapture->stop();
+            m_screenCapture->stop();
         m_captureActive = false;
         stopAudioCapture();
         m_state = State::Idle;
@@ -696,7 +704,7 @@ void ScreenRecorder::finalizeRecording()
 void ScreenRecorder::fail(const QString &message)
 {
     if (!m_videoFrameInput)
-        m_waylandCapture->stop();
+        m_screenCapture->stop();
     m_captureActive = false;
     stopAudioCapture();
     if (m_mediaRecorder.recorderState() != QMediaRecorder::StoppedState)

@@ -1,6 +1,6 @@
 # Moment
 
-Replay e captura de gameplay para Linux. Deixe o Moment rodando em segundo plano e aperte **F8** para salvar os últimos segundos da tela ou **F9** para tirar um print.
+Replay e captura de gameplay para Linux, com uma versão Windows em desenvolvimento. Deixe o Moment rodando em segundo plano e aperte **F8** para salvar os últimos segundos da tela ou **F9** para tirar um print.
 
 O app é feito em C++ e Qt Quick, com captura pelo PipeWire e pelos portais do desktop. O foco atual é Wayland, principalmente KDE Plasma.
 
@@ -32,6 +32,39 @@ makepkg -si
 ```
 
 Depois, abra **Moment** pelo menu de aplicativos ou execute `medal-linux` no terminal. O `makepkg` precisa dos pacotes `base-devel` e `git` instalados.
+
+## Windows (experimental)
+
+A branch `windows-port` adiciona captura do monitor principal, replay, prints,
+atalhos globais configuráveis, biblioteca, editor, bandeja e detecção de processos
+no Windows. O Linux continua usando PipeWire e os portais do desktop.
+
+As builds de teste ficam nos artefatos do workflow **Windows**, no GitHub Actions.
+Extraia toda a pasta **Moment-Windows-x64** e abra `Moment.exe`; as DLLs e pastas de
+plugins precisam ficar junto do executável. Ainda não é uma versão estável para
+jogos: captura de tela, desempenho, fullscreen e áudio precisam de validação em PCs
+Windows reais. O áudio usa o dispositivo de entrada escolhido; loopback automático
+do som do jogo ainda não está implementado.
+
+Para compilar no Windows 10/11 x64, abra o terminal **MSYS2 UCRT64** e instale:
+
+```sh
+pacman -S --needed mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-cmake \
+  mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-qt6-base \
+  mingw-w64-ucrt-x86_64-qt6-declarative mingw-w64-ucrt-x86_64-qt6-multimedia \
+  mingw-w64-ucrt-x86_64-qt6-svg mingw-w64-ucrt-x86_64-qtkeychain \
+  mingw-w64-ucrt-x86_64-sqlite3 mingw-w64-ucrt-x86_64-ffmpeg
+cmake -S . -B build-windows -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build-windows --parallel 4
+ctest --test-dir build-windows --output-on-failure
+./build-windows/Moment.exe
+```
+
+Para montar uma pasta portátil, execute `bash packaging/windows/package.sh build-windows`.
+O script recusa sobrescrever uma pasta `dist/Moment` existente. O teste
+`windows-capture-test` só captura a tela quando `MOMENT_TEST_DESKTOP_CAPTURE=1` estiver
+presente; use-o apenas em um desktop de teste sem dados privados. Os demais testes
+usam mídia sintética e arquivos temporários.
 
 ## Compilar manualmente
 

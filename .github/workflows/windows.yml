@@ -1,0 +1,66 @@
+name: Windows
+
+on:
+  push:
+    branches: [main, windows-port]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-declarative
+            mingw-w64-ucrt-x86_64-qt6-multimedia
+            mingw-w64-ucrt-x86_64-qt6-svg
+            mingw-w64-ucrt-x86_64-qtkeychain
+            mingw-w64-ucrt-x86_64-sqlite3
+            mingw-w64-ucrt-x86_64-ffmpeg
+      - name: Configure
+        run: cmake -S . -B build-windows -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build-windows --parallel 4
+      - name: Test shared features and native global keys
+        env:
+          MOMENT_UI_PREVIEW_DIR: ${{ github.workspace }}/artifacts/windows-ui
+        run: |
+          mkdir -p artifacts/windows-ui
+          ctest --test-dir build-windows --output-on-failure --timeout 90 -E windows-capture-test
+      - name: Test real desktop capture on disposable runner
+        env:
+          MOMENT_TEST_DESKTOP_CAPTURE: '1'
+        run: ctest --test-dir build-windows --output-on-failure --timeout 90 -R windows-capture-test
+      - name: Package portable app
+        run: bash packaging/windows/package.sh build-windows
+      - name: Upload Windows portable folder
+        uses: actions/upload-artifact@v4
+        with:
+          name: Moment-Windows-x64
+          path: dist/Moment/
+          if-no-files-found: error
+      - name: Upload test reports and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-validation
+          path: |
+            artifacts/windows-ui/
+            build-windows/Testing/Temporary/LastTest.log
+            build-windows/Testing/Temporary/LastTestsFailed.log

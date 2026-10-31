@@ -1,3 +1,4 @@
+#include "../platform/media_tools.h"
 #include "google_drive_share.h"
 
 #include <QCryptographicHash>
@@ -20,6 +21,7 @@
 #include <QTcpSocket>
 #include <QTimer>
 #include <QClipboard>
+#include <QDesktopServices>
 
 #include <utility>
 
@@ -231,6 +233,13 @@ void GoogleDriveShare::beginAuthorization()
     query.addQueryItem(QStringLiteral("code_challenge_method"), QStringLiteral("S256"));
     authorizationUrl.setQuery(query);
     setStatusMessage(QStringLiteral("Approve Moment in your browser. The clip will upload automatically after that."));
+#ifdef Q_OS_WIN
+    const bool browserStarted = QDesktopServices::openUrl(authorizationUrl);
+    if (!browserStarted) {
+        m_oauthServer.close();
+        fail(QStringLiteral("Could not open the default browser for Google sign-in."));
+    }
+#else
     QString browserPath;
     const QString preferredBrowser = qEnvironmentVariable("MOMENT_BROWSER").trimmed();
     if (!preferredBrowser.isEmpty())
@@ -258,6 +267,7 @@ void GoogleDriveShare::beginAuthorization()
     } else {
         qInfo().noquote() << "Moment opened Google sign-in in" << QFileInfo(browserPath).fileName();
     }
+    #endif
     QTimer::singleShot(180000, this, [this] {
         if (m_busy && m_oauthServer.isListening()) {
             m_oauthServer.close();
@@ -453,7 +463,7 @@ void GoogleDriveShare::saveRefreshToken(const QString &token, std::function<void
 
 void GoogleDriveShare::uploadClip(const QString &path)
 {
-    const QString ffmpeg = QStandardPaths::findExecutable(QStringLiteral("ffmpeg"));
+    const QString ffmpeg = momentMediaTool(QStringLiteral("ffmpeg"));
     if (ffmpeg.isEmpty()) {
         fail(QStringLiteral("FFmpeg is required to prepare a video for Google Drive playback."));
         return;
