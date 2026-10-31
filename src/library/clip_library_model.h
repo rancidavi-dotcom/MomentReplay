@@ -36,6 +36,7 @@ public:
     int clipCount() const;
     QString statusMessage() const;
 
+    Q_INVOKABLE QString localFilePath(const QUrl &url) const { return url.toLocalFile(); }
     Q_INVOKABLE void importFile(const QString &path);
     bool replaceWithFile(const QString &originalPath, const QString &replacementPath,
                          QString *error = nullptr);

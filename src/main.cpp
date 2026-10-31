@@ -23,6 +23,8 @@
 #include <QDebug>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QTemporaryDir>
+#include <QSettings>
 #include <QUrl>
 #include <QWindow>
 
@@ -50,14 +52,26 @@ int main(int argc, char *argv[])
         QStringLiteral("Use an explicit data directory (useful for isolated runs)."),
         QStringLiteral("directory"));
     parser.addOption(dataDirectoryOption);
+    const QCommandLineOption smokeTestOption(QStringLiteral("smoke-test"),
+        QStringLiteral("Check UI startup with temporary data and no screen capture, then exit."));
+    parser.addOption(smokeTestOption);
     parser.process(app);
 
-    const QString dataDirectory = parser.isSet(dataDirectoryOption)
+    QTemporaryDir smokeDirectory;
+    const bool smokeTest = parser.isSet(smokeTestOption);
+    if (smokeTest && !smokeDirectory.isValid())
+        return 2;
+    const QString dataDirectory = smokeTest ? smokeDirectory.path() : parser.isSet(dataDirectoryOption)
         ? QDir(parser.value(dataDirectoryOption)).absolutePath()
         : QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     if (!QDir().mkpath(dataDirectory))
         return 2;
 
+    if (smokeTest) {
+        QSettings settings(dataDirectory + QStringLiteral("/settings.ini"), QSettings::IniFormat);
+        settings.setValue(QStringLiteral("discord/richPresenceEnabled"), false);
+        settings.sync();
+    }
     ClipRepository repository(dataDirectory + QStringLiteral("/library.sqlite3"));
     if (!repository.isOpen()) {
         qCritical("Unable to open the local clip library database: %s", qPrintable(repository.errorString()));
@@ -199,7 +213,7 @@ int main(int argc, char *argv[])
             std::fprintf(stderr, "QML component entered error state without diagnostics.\n");
         return 3;
     }
-    QObject *root = component.create();
+    QObject *root = component.createWithInitialProperties({{QStringLiteral("autoCaptureEnabled"), !smokeTest}});
     if (!root) {
         for (const auto &error : component.errors())
             std::fprintf(stderr, "%s\n", qPrintable(error.toString()));
@@ -210,6 +224,9 @@ int main(int argc, char *argv[])
     root->setParent(&engine);
     auto *mainWindow = qobject_cast<QWindow *>(root);
     trayController.setMainWindow(mainWindow);
-    trayController.showTrayIcon();
+    if (smokeTest)
+        QTimer::singleShot(1000, &app, &QCoreApplication::quit);
+    else
+        trayController.showTrayIcon();
     return app.exec();
 }

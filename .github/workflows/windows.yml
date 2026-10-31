@@ -49,6 +49,18 @@ jobs:
         run: ctest --test-dir build-windows --output-on-failure --timeout 90 -R windows-capture-test
       - name: Package portable app
         run: bash packaging/windows/package.sh build-windows
+      - name: Start packaged app without MSYS2 on PATH
+        shell: pwsh
+        run: |
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          Remove-Item Env:QT_PLUGIN_PATH, Env:QML2_IMPORT_PATH, Env:QML_IMPORT_PATH -ErrorAction SilentlyContinue
+          $exe = Join-Path $PWD 'dist/Moment/Moment.exe'
+          $process = Start-Process -FilePath $exe -ArgumentList '--smoke-test' -PassThru
+          if (-not $process.WaitForExit(30000)) {
+            $process.Kill()
+            throw 'Packaged Moment did not finish its startup check.'
+          }
+          if ($process.ExitCode -ne 0) { throw "Packaged Moment failed: $($process.ExitCode)" }
       - name: Upload Windows portable folder
         uses: actions/upload-artifact@v4
         with:

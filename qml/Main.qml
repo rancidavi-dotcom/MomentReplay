@@ -41,6 +41,7 @@ ApplicationWindow {
     property color ink: "#f2f5f8"
     property color muted: "#94a6b7"
     property color accent: "#b5ec72"
+    property bool autoCaptureEnabled: true
     property bool windowsDesktop: Qt.platform.os === "windows"
     property int page: 0
     property url activeSource: ""
@@ -52,6 +53,7 @@ ApplicationWindow {
 
     Dialog {
         id: windowsShortcutDialog
+        objectName: "windowsShortcutDialog"
         title: "Capture shortcuts"
         anchors.centerIn: parent
         width: Math.min(window.width - 40, 440)
@@ -143,11 +145,11 @@ ApplicationWindow {
     }
 
     function localPathFromUrl(fileUrl) {
-        return decodeURIComponent(fileUrl.toString().replace(/^file:\/\//, ""))
+        return clipLibrary.localFilePath(fileUrl)
     }
 
     Component.onCompleted: Qt.callLater(function() {
-        if (!screenRecorder.buffering && !screenRecorder.busy)
+        if (window.autoCaptureEnabled && !screenRecorder.buffering && !screenRecorder.busy)
             screenRecorder.startBuffering()
     })
 
@@ -158,7 +160,7 @@ ApplicationWindow {
         nameFilters: ["Videos and images (*.mp4 *.m4v *.mkv *.mov *.webm *.avi *.mpg *.mpeg *.ts *.mts *.ogv *.png *.jpg *.jpeg)", "All files (*)"]
         onAccepted: {
             for (const file of selectedFiles)
-                clipLibrary.importFile(file.toLocalFile())
+                clipLibrary.importFile(window.localPathFromUrl(file))
         }
     }
 

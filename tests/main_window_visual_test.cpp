@@ -34,6 +34,7 @@ public:
     QString screenshotKey = QStringLiteral("F9");
     QString status = QStringLiteral("Global capture shortcuts active · replay F8 · screenshot F9");
     Q_INVOKABLE void requestCaptureShortcuts() {}
+    Q_INVOKABLE bool setCaptureShortcuts(const QString &, const QString &) { return true; }
 };
 
 class VisualTray final : public QObject {
@@ -182,6 +183,8 @@ private slots:
         QVERIFY2(component.isReady(), qPrintable(component.errorString()));
         std::unique_ptr<QQuickWindow> window(qobject_cast<QQuickWindow *>(component.create()));
         QVERIFY2(window != nullptr, qPrintable(component.errorString()));
+        if (qEnvironmentVariableIsSet("MOMENT_PREVIEW_WINDOWS"))
+            window->setProperty("windowsDesktop", true);
         QVERIFY(window->findChild<QQuickItem *>(QStringLiteral("createClipShareLinkButton")));
         QVERIFY(window->findChild<QQuickItem *>(QStringLiteral("clipShareStatus")));
         QTRY_VERIFY(recorder.buffering());
@@ -297,6 +300,15 @@ private slots:
         QTest::qWait(250);
         if (!output.isEmpty())
             QVERIFY(window->grabWindow().save(QDir(output).filePath("moment-sharing-settings-focused-1280.png")));
+        if (window->property("windowsDesktop").toBool()) {
+            auto *dialog = window->findChild<QObject *>(QStringLiteral("windowsShortcutDialog"));
+            QVERIFY(dialog);
+            QVERIFY(QMetaObject::invokeMethod(dialog, "open"));
+            QTest::qWait(250);
+            if (!output.isEmpty())
+                QVERIFY(window->grabWindow().save(QDir(output).filePath("moment-windows-shortcuts.png")));
+            QVERIFY(QMetaObject::invokeMethod(dialog, "close"));
+        }
         QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join('\n')));
     }
 };
