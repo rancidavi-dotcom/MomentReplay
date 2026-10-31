@@ -8,6 +8,9 @@
 WindowsScreenCast::WindowsScreenCast(const QString &, QObject *parent)
     : QObject(parent)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 12, 0)
+    m_capture.setMaximumFrameRate(60);
+#endif
     m_session.setScreenCapture(&m_capture);
     m_session.setVideoSink(&m_sink);
     m_firstFrameTimer.setSingleShot(true);
@@ -27,7 +30,7 @@ WindowsScreenCast::WindowsScreenCast(const QString &, QObject *parent)
     connect(&m_sink, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame) {
         if (!m_starting && !m_active)
             return;
-        const QImage image = frame.toImage();
+        const QImage image = frame.toImage().convertToFormat(QImage::Format_ARGB32);
         if (image.isNull())
             return;
         if (m_starting) {

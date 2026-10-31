@@ -37,6 +37,7 @@ for ((i=0; i<${#queue[@]}; ++i)); do
     done < <(objdump -p "$binary" | sed -n 's/^[[:space:]]*DLL Name: //p')
 done
 
+git rev-parse HEAD > "$destination/SOURCE-REVISION.txt"
 cp LICENSE "$destination/LICENSE-Moment.txt"
 cp packaging/windows/START-HERE.txt "$destination/START-HERE.txt"
 for package in "${!packages[@]}"; do
