@@ -517,7 +517,7 @@ ApplicationWindow {
                         RowLayout {
                             Layout.fillWidth: true; spacing: 7
                             Rectangle { width: 6; height: 6; radius: 3; color: screenRecorder.buffering ? window.accent : "#efbd68" }
-                            Label { text: screenRecorder.buffering ? "Replay active" : screenRecorder.busy ? "Awaiting permission" : "Capture idle"; color: window.ink; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
+                            Label { text: screenRecorder.buffering ? "Replay active" : screenRecorder.busy ? (window.windowsDesktop ? "Starting capture" : "Awaiting permission") : "Capture idle"; color: window.ink; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
                             Label { text: screenRecorder.buffering ? screenRecorder.bufferedSeconds + "s" : ""; color: window.accent; font.pixelSize: 11; font.bold: true }
                         }
                         MomentProgress { Layout.fillWidth: true; from: 0; to: Math.max(1, screenRecorder.bufferSeconds); value: Math.min(screenRecorder.bufferedSeconds, to) }
@@ -810,7 +810,7 @@ ApplicationWindow {
                                         Label {
                                             text: screenRecorder.recording ? "Recording session"
                                                   : screenRecorder.buffering ? "Replay window active"
-                                                  : screenRecorder.busy ? "Waiting for screen permission"
+                                                  : screenRecorder.busy ? (window.windowsDesktop ? "Starting screen capture" : "Waiting for screen permission")
                                                   : "Capture stopped"
                                             color: window.ink; font.pixelSize: 10
                                         }
@@ -896,7 +896,9 @@ ApplicationWindow {
                                             text: globalShortcuts.registered
                                                 ? screenRecorder.buffering
                                                     ? "Press " + globalShortcuts.triggerDescription + " to save the replay" + (globalShortcuts.screenshotRegistered ? "; " + globalShortcuts.screenshotTriggerDescription + " saves a screenshot." : ".")
-                                                    : "Moment starts replay capture when it opens. Retry screen capture here if the system permission was closed."
+                                                    : window.windowsDesktop
+                                                        ? "Moment captures your primary display automatically. Restart capture here if the display or driver changed."
+                                                        : "Moment starts replay capture when it opens. Retry screen capture here if the system permission was closed."
                                                 : "Enable capture hotkeys in Preferences. Screenshot is also available here."
                                             color: "#82909f"; wrapMode: Text.Wrap; font.pixelSize: 10
                                         }
