@@ -52,6 +52,8 @@ jobs:
           MOMENT_TEST_DESKTOP_CAPTURE: '1'
         run: ctest --test-dir build-windows --output-on-failure --timeout 90 -R windows-capture-test
       - name: Package portable app
+        env:
+          MOMENT_SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
         run: bash packaging/windows/package.sh build-windows
       - name: Start packaged app without MSYS2 on PATH
         shell: pwsh

@@ -50,7 +50,11 @@ for ((i=0; i<${#queue[@]}; ++i)); do
     done < <(objdump -p "$binary" | sed -n 's/^[[:space:]]*DLL Name: //p')
 done
 
-git rev-parse HEAD > "$destination/SOURCE-REVISION.txt"
+if [[ -n "${MOMENT_SOURCE_REVISION:-}" ]]; then
+    printf '%s\n' "$MOMENT_SOURCE_REVISION" > "$destination/SOURCE-REVISION.txt"
+else
+    git rev-parse HEAD > "$destination/SOURCE-REVISION.txt"
+fi
 cp LICENSE "$destination/LICENSE-Moment.txt"
 cp packaging/windows/START-HERE.txt "$destination/START-HERE.txt"
 echo "Copying license notices for ${#packages[@]} dependency packages"
