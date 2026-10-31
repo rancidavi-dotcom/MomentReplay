@@ -3,6 +3,7 @@
 #include "recording/screen_recorder.h"
 
 #include <QLabel>
+#include <QProcess>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -46,7 +47,20 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!replays.isEmpty() || !failures.isEmpty(), 20000);
         QVERIFY2(failures.isEmpty(), qPrintable(recorder.statusMessage()));
         QCOMPARE(replays.count(), 1);
-        QVERIFY(QFileInfo(replays.first().first().toString()).size() > 0);
+        const QString replayPath = replays.first().first().toString();
+        QVERIFY(QFileInfo(replayPath).size() > 0);
+        QProcess probe;
+        probe.start(QStringLiteral("ffprobe"), {"-v", "error", "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1", replayPath});
+        QVERIFY(probe.waitForFinished(10000));
+        QCOMPARE(probe.exitCode(), 0);
+        const double duration = probe.readAllStandardOutput().trimmed().toDouble();
+        qInfo() << "Native Windows replay duration:" << duration;
+        QVERIFY2(duration >= 1.0 && duration <= 3.5, "A two-second replay must retain its real duration");
+        QProcess decode;
+        decode.start(QStringLiteral("ffmpeg"), {"-v", "error", "-i", replayPath, "-f", "null", "-"});
+        QVERIFY(decode.waitForFinished(10000));
+        QCOMPARE(decode.exitCode(), 0);
         recorder.stopCapture();
         QVERIFY(!recorder.busy());
         recorder.startBuffering();
