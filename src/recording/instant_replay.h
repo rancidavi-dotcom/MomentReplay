@@ -11,6 +11,7 @@
 #include <QAudioBuffer>
 #include <QAudioBufferInput>
 #include <QAudioFormat>
+#include <QTimer>
 
 class InstantReplay final : public QObject {
     Q_OBJECT
@@ -71,6 +72,7 @@ private:
     void appendEncodedFrame(Frame frame);
     void trimBuffer();
     void sendExportFrames();
+    void startExportPump();
     void sendExportAudio();
     void maybeFinishExport();
     void finishExport();
@@ -101,6 +103,7 @@ private:
     QVector<Frame> m_exportFrames;
     QMediaCaptureSession m_exportSession;
     QMediaRecorder m_exportRecorder;
+    QTimer m_exportPump;
     QVideoFrameInput *m_exportInput = nullptr;
     QAudioBufferInput *m_exportAudioInput = nullptr;
     QAudioFormat m_audioFormat;

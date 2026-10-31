@@ -1,4 +1,5 @@
 #include "instant_replay.h"
+#include "encoding_profile.h"
 
 #include <QBuffer>
 #include <QDir>
@@ -17,6 +18,8 @@ InstantReplay::InstantReplay(QObject *parent)
     : QObject(parent), m_exportRecorder(this)
 {
     m_clock.start();
+    m_exportPump.setTimerType(Qt::PreciseTimer);
+    connect(&m_exportPump, &QTimer::timeout, this, &InstantReplay::sendExportFrames);
     m_exportSession.setRecorder(&m_exportRecorder);
 
     connect(&m_frameEncoder, &QFutureWatcher<Frame>::finished, this, [this] {
@@ -30,7 +33,7 @@ InstantReplay::InstantReplay(QObject *parent)
     connect(&m_exportRecorder, &QMediaRecorder::recorderStateChanged, this,
             [this](QMediaRecorder::RecorderState state) {
         if (state == QMediaRecorder::RecordingState)
-            sendExportFrames();
+            startExportPump();
         else if (state == QMediaRecorder::StoppedState && m_finalizeRequested)
             finishExport();
     });
@@ -212,8 +215,6 @@ bool InstantReplay::saveLastClip(const QString &outputPath, int durationSeconds,
     const QVideoFrame firstFrame(firstImage);
     m_exportInput = new QVideoFrameInput(firstFrame.surfaceFormat(), this);
     m_exportSession.setVideoFrameInput(m_exportInput);
-    connect(m_exportInput, &QVideoFrameInput::readyToSendVideoFrame,
-            this, &InstantReplay::sendExportFrames, Qt::UniqueConnection);
 
     delete m_exportAudioInput;
     m_exportAudioInput = nullptr;
@@ -241,8 +242,10 @@ bool InstantReplay::saveLastClip(const QString &outputPath, int durationSeconds,
     m_exportRecorder.setMediaFormat(format);
     m_exportRecorder.setVideoFrameRate(m_exportFps);
     m_exportRecorder.setQuality(static_cast<QMediaRecorder::Quality>(qBound(0, quality, 4)));
+    m_exportRecorder.setEncodingMode(QMediaRecorder::AverageBitRateEncoding);
+    m_exportRecorder.setVideoBitRate(MomentEncoding::videoBitRate(quality, firstImage.size()));
     if (m_exportAudioInput)
-        m_exportRecorder.setAudioBitRate(160000);
+        m_exportRecorder.setAudioBitRate(128000);
     m_exportRecorder.setOutputLocation(QUrl::fromLocalFile(m_outputPath));
     m_exportRecorder.record();
     return true;
@@ -263,15 +266,18 @@ InstantReplay::Frame InstantReplay::encodeFrame(const QVideoFrame &frame, qint64
 {
     Frame encoded;
     encoded.timestampMs = timestampMs;
-    const QImage image = frame.toImage();
+    QImage image = frame.toImage();
     if (image.isNull())
         return encoded;
+    const QSize boundedSize = MomentEncoding::replayFrameSize(image.size());
+    if (image.size() != boundedSize)
+        image = image.scaled(boundedSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
     QBuffer buffer(&encoded.jpeg);
     if (!buffer.open(QIODevice::WriteOnly))
         return {};
     QImageWriter writer(&buffer, "jpeg");
-    writer.setQuality(55);
+    writer.setQuality(48);
     if (!writer.write(image))
         return {};
     encoded.size = image.size();
@@ -333,9 +339,7 @@ void InstantReplay::sendExportFrames()
     if (!m_exporting || m_exportRecorder.recorderState() != QMediaRecorder::RecordingState)
         return;
 
-    constexpr int framesPerTurn = 6;
-    int sent = 0;
-    while (m_exportIndex < m_exportFrames.size() && sent < framesPerTurn) {
+    if (m_exportIndex < m_exportFrames.size()) {
         const Frame &stored = m_exportFrames.at(m_exportIndex);
         QImage image = QImage::fromData(stored.jpeg, "JPEG");
         if (image.isNull()) {
@@ -350,15 +354,21 @@ void InstantReplay::sendExportFrames()
         if (!m_exportInput->sendVideoFrame(frame))
             return;
         ++m_exportIndex;
-        ++sent;
     }
 
     if (m_exportIndex >= m_exportFrames.size()) {
         m_videoInputFinished = true;
         maybeFinishExport();
-    } else {
-        QMetaObject::invokeMethod(this, &InstantReplay::sendExportFrames, Qt::QueuedConnection);
     }
+}
+
+void InstantReplay::startExportPump()
+{
+    if (!m_exporting || m_exportRecorder.recorderState() != QMediaRecorder::RecordingState)
+        return;
+    // Feed at playback speed instead of in a tight loop. The export takes
+    // about the clip's duration, but avoids a sudden CPU spike on F8.
+    m_exportPump.start(qMax(1, 1000 / qMax(1, m_exportFps)));
 }
 
 void InstantReplay::sendExportAudio()
@@ -389,6 +399,7 @@ void InstantReplay::finishExport()
     if (!m_exporting || !m_finalizeRequested)
         return;
     m_finalizeRequested = false;
+    m_exportPump.stop();
     const QFileInfo output(m_outputPath);
     if (!output.exists() || output.size() == 0) {
         QFile::remove(m_outputPath);
@@ -413,6 +424,7 @@ void InstantReplay::finishExport()
 
 void InstantReplay::failExport(const QString &message)
 {
+    m_exportPump.stop();
     if (m_exportRecorder.recorderState() != QMediaRecorder::StoppedState)
         m_exportRecorder.stop();
     QFile::remove(m_outputPath);
