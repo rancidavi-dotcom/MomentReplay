@@ -29,7 +29,7 @@ modules:
   - name: x264
     buildsystem: simple
     build-commands:
-      - ./configure --prefix=/app --enable-pic --disable-cli
+      - ./configure --prefix=/app --enable-pic --enable-static --disable-shared --disable-cli
       - make -j${FLATPAK_BUILDER_N_JOBS}
       - make install-lib-static
       - install -Dm644 COPYING /app/share/licenses/x264/COPYING
