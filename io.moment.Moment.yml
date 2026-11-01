@@ -17,6 +17,7 @@ modules:
   - name: qtkeychain
     buildsystem: cmake-ninja
     config-opts:
+      - -DBUILD_WITH_QT6=ON
       - -DBUILD_TESTING=OFF
       - -DBUILD_TRANSLATIONS=OFF
       - -DCMAKE_INSTALL_PREFIX=/app
