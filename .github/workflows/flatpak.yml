@@ -22,7 +22,7 @@ jobs:
       - name: Add Flathub and build dependencies
         run: |
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user --yes flathub org.kde.Platform//6.11 org.kde.Sdk//6.11
+          flatpak install --user --assumeyes flathub org.kde.Platform//6.11 org.kde.Sdk//6.11
       - name: Build Flatpak
         run: flatpak-builder --user --force-clean --repo=flatpak-repo flatpak-build io.moment.Moment.yml
       - name: Create installable Flatpak bundle
