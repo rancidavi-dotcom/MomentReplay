@@ -8,6 +8,16 @@ O app é feito em C++ e Qt Quick, com captura pelo PipeWire e pelos portais do d
 
 Biblioteca do Moment com mídia de exemplo.
 
+## Instalação pelo Flatpak
+
+Baixe `Moment-x86_64.flatpak` na página de [releases](https://github.com/rancidavi-dotcom/MomentReplay/releases) e instale para sua conta:
+
+```sh
+flatpak install --user --bundle ~/Downloads/Moment-x86_64.flatpak
+```
+
+O Flatpak usa os portais do desktop para solicitar acesso à tela e aos atalhos globais. Para captura no Wayland, mantenha o portal compatível com seu ambiente gráfico ativo.
+
 ## O que já funciona
 
 - Replay com duração configurável e gravação de sessões.
