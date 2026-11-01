@@ -26,7 +26,7 @@ jobs:
       - name: Build Flatpak
         run: flatpak-builder --user --force-clean --repo=flatpak-repo flatpak-build io.moment.Moment.yml
       - name: Create installable Flatpak bundle
-        run: flatpak build-bundle flatpak-repo Moment-x86_64.flatpak io.github.rancidavi_dotcom.moment
+        run: flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo flatpak-repo Moment-x86_64.flatpak io.github.rancidavi_dotcom.moment stable
       - uses: actions/upload-artifact@v4
         with:
           name: Moment-Flatpak-x86_64
