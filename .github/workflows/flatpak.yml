@@ -24,7 +24,7 @@ jobs:
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user --assumeyes flathub org.kde.Platform//6.11 org.kde.Sdk//6.11
       - name: Build Flatpak
-        run: flatpak-builder --user --force-clean --repo=flatpak-repo flatpak-build io.moment.Moment.yml
+        run: flatpak-builder --user --force-clean --default-branch=stable --repo=flatpak-repo flatpak-build io.moment.Moment.yml
       - name: Create installable Flatpak bundle
         run: flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo flatpak-repo Moment-x86_64.flatpak io.github.rancidavi_dotcom.moment stable
       - uses: actions/upload-artifact@v4
