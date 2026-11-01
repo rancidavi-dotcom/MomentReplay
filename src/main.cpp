@@ -41,7 +41,9 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationName(QStringLiteral("medal-linux"));
     QCoreApplication::setOrganizationName(QStringLiteral("MedalLinuxProject"));
 #endif
-    QGuiApplication::setDesktopFileName(QStringLiteral("io.moment.Moment"));
+    const QString flatpakAppId = qEnvironmentVariable("FLATPAK_ID");
+    QGuiApplication::setDesktopFileName(flatpakAppId.isEmpty()
+        ? QStringLiteral("io.moment.Moment") : flatpakAppId);
     QGuiApplication::setApplicationDisplayName(QStringLiteral("Moment"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/io.moment.Moment.svg")));
 

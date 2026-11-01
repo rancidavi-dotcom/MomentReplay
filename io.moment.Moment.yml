@@ -1,0 +1,72 @@
+app-id: io.github.rancidavi_dotcom.moment
+runtime: org.kde.Platform
+runtime-version: '6.11'
+sdk: org.kde.Sdk
+command: medal-linux
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio
+  - --device=dri
+  - --filesystem=xdg-videos/Moment:create
+  - --filesystem=xdg-pictures/Moment:create
+  - --talk-name=org.freedesktop.secrets
+modules:
+  - name: qtkeychain
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DBUILD_TESTING=OFF
+      - -DBUILD_TRANSLATIONS=OFF
+      - -DCMAKE_INSTALL_PREFIX=/app
+    sources:
+      - type: git
+        url: https://github.com/frankosterfeld/qtkeychain.git
+        commit: ad7344c45a86a4f66cbafc4b081b5f7b876cb0b7
+
+  - name: x264
+    buildsystem: simple
+    build-commands:
+      - ./configure --prefix=/app --enable-pic --disable-cli
+      - make -j${FLATPAK_BUILDER_N_JOBS}
+      - make install-lib-static
+      - install -Dm644 COPYING /app/share/licenses/x264/COPYING
+    sources:
+      - type: git
+        url: https://code.videolan.org/videolan/x264.git
+        commit: 0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee
+
+  - name: ffmpeg
+    buildsystem: simple
+    build-commands:
+      - ./configure --prefix=/app --bindir=/app/bin --libdir=/app/lib --shlibdir=/app/lib --pkgconfigdir=/app/lib/pkgconfig --enable-gpl --enable-libx264 --enable-shared --disable-static --disable-doc --disable-debug --disable-ffplay --disable-ffprobe --enable-pic --disable-x86asm --pkg-config-flags=--static --extra-cflags=-I/app/include --extra-ldflags=-L/app/lib
+      - make -j${FLATPAK_BUILDER_N_JOBS}
+      - make install
+      - install -Dm644 COPYING.GPLv2 /app/share/licenses/ffmpeg/COPYING.GPLv2
+    sources:
+      - type: git
+        url: https://github.com/FFmpeg/FFmpeg.git
+        commit: 946fcce07b6dcd0331c8cc609192aeff5e1924f8
+
+  - name: moment
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DCMAKE_INSTALL_PREFIX=/app
+      - -DCMAKE_PREFIX_PATH=/app
+      - -DBUILD_TESTING=OFF
+      - -DMOMENT_GOOGLE_OAUTH_CLIENT_ID=
+      - -DMOMENT_GOOGLE_OAUTH_CLIENT_SECRET=
+    sources:
+      - type: dir
+        path: .
+    post-install:
+      - install -Dm644 packaging/flatpak/io.github.rancidavi_dotcom.moment.metainfo.xml /app/share/metainfo/io.github.rancidavi_dotcom.moment.metainfo.xml
+      - install -Dm644 /app/share/icons/hicolor/scalable/apps/io.moment.Moment.svg /app/share/icons/hicolor/scalable/apps/io.github.rancidavi_dotcom.moment.svg
+      - mv /app/share/applications/io.moment.Moment.desktop /app/share/applications/io.github.rancidavi_dotcom.moment.desktop
+      - sed -i 's/^Icon=io\.moment\.Moment$/Icon=io.github.rancidavi_dotcom.moment/' /app/share/applications/io.github.rancidavi_dotcom.moment.desktop
+    cleanup:
+      - /include
+      - /lib/pkgconfig
+      - /share/man
