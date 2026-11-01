@@ -29,7 +29,7 @@ O Flatpak usa os portais do desktop para solicitar acesso à tela e aos atalhos 
 - Atalhos globais, confirmação de captura na tela e execução na bandeja do sistema.
 - Atividade no Discord com o jogo ou launcher detectado.
 
-O editor ainda é simples: não tem timeline de várias faixas, transições ou efeitos. A detecção de jogos também não identifica kills, vitórias ou outros eventos da partida.
+O Moment mantém um escopo direto: salvar os últimos segundos, organizar as capturas localmente e fazer cortes rápidos antes de exportar o clipe.
 
 ## Instalação no Arch Linux
 
