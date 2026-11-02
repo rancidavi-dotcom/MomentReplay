@@ -93,6 +93,7 @@ class VisualFriendsClient final : public QObject {
     Q_PROPERTY(bool busy MEMBER busy CONSTANT)
     Q_PROPERTY(bool configured MEMBER configured CONSTANT)
     Q_PROPERTY(bool signedIn MEMBER signedIn CONSTANT)
+    Q_PROPERTY(bool restoringSession MEMBER restoringSession CONSTANT)
     Q_PROPERTY(QString recoveryKey MEMBER recoveryKey CONSTANT)
     Q_PROPERTY(QString statusMessage MEMBER statusMessage CONSTANT)
     Q_PROPERTY(QString transferStatus MEMBER transferStatus CONSTANT)
@@ -109,6 +110,7 @@ public:
     bool busy = false;
     bool configured = true;
     bool signedIn = false;
+    bool restoringSession = false;
     QString recoveryKey;
     QString statusMessage = QStringLiteral("Demo preview · Friends service is not connected");
     QString transferStatus;
@@ -129,6 +131,7 @@ public:
     Q_INVOKABLE void declineRequest(const QString &) {}
     Q_INVOKABLE void dismissRecoveryKey() {}
     Q_INVOKABLE void downloadClip(const QString &) {}
+    Q_INVOKABLE void deleteClip(const QString &) {}
     Q_INVOKABLE void refresh() {}
     Q_INVOKABLE void selectFriend(const QString &) {}
     Q_INVOKABLE void sendClip(const QUrl &) {}
