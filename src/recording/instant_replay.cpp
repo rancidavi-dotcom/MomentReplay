@@ -161,6 +161,11 @@ int InstantReplay::bufferedSeconds() const
     return static_cast<int>((m_frames.constLast().timestampMs - m_frames.constFirst().timestampMs) / 1000);
 }
 
+bool InstantReplay::hasReplayFrames() const
+{
+    return m_frames.size() >= 2;
+}
+
 bool InstantReplay::exporting() const
 {
     return m_exporting;
@@ -255,12 +260,14 @@ bool InstantReplay::saveLastClip(const QString &outputPath, int durationSeconds,
     const bool includeAudio = !m_audioChunks.isEmpty();
     if (includeAudio)
         format.setAudioCodec(QMediaFormat::AudioCodec::AAC);
+#ifndef Q_OS_LINUX
     if (!format.isSupported(QMediaFormat::Encode)) {
         emit operationFailed(includeAudio
                                  ? QStringLiteral("This system has no Qt Multimedia encoder for MP4/H.264/AAC.")
                                  : QStringLiteral("This system has no Qt Multimedia encoder for MP4/H.264."));
         return false;
     }
+#endif
 
     m_outputPath = outputPath;
     m_exportTemporaryDirectory = QDir(QDir::tempPath()).filePath(
@@ -402,7 +409,10 @@ void InstantReplay::startPreparedExport(PreparedExport prepared)
     const int bitrate = MomentEncoding::videoBitRate(m_pendingExportQuality, prepared.firstImage.size());
     // libx264 cannot encode frames whose width or height is not divisible by 2
     // with the yuv420p pixel format; scale to even dimensions before encoding.
-    arguments << QStringLiteral("-vf") << QStringLiteral("scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1")
+    // Fit the source into the output bounds, then round both final axes down
+    // to even values. This keeps libx264/yuv420p valid for odd and ultrawide
+    // desktop sizes even if the scaler's aspect-ratio rounding is fractional.
+    arguments << QStringLiteral("-vf") << QStringLiteral("scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease,scale=w='max(2,trunc(iw/2)*2)':h='max(2,trunc(ih/2)*2)',setsar=1")
               << QStringLiteral("-c:v") << QStringLiteral("libx264")
               << QStringLiteral("-threads:v") << QStringLiteral("1")
               << QStringLiteral("-preset") << QStringLiteral("ultrafast")

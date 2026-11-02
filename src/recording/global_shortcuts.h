@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtGlobal>
+#include <QElapsedTimer>
 
 #ifdef Q_OS_WIN
 #include <QAbstractNativeEventFilter>
@@ -67,7 +68,19 @@ private slots:
 #endif
 
 private:
+    friend class GlobalShortcutsTest;
     void setStatus(const QString &message);
+    bool acceptActivation(const QString &shortcutId)
+    {
+        constexpr qint64 duplicateWindowMs = 180;
+        qint64 &lastActivation = shortcutId == QStringLiteral("save-replay")
+            ? m_lastReplayActivationMs : m_lastScreenshotActivationMs;
+        const qint64 now = m_activationClock.elapsed();
+        if (now - lastActivation < duplicateWindowMs)
+            return false;
+        lastActivation = now;
+        return true;
+    }
 #ifndef Q_OS_WIN
     void connectRequestResponse(const QString &requestPath, const char *slot);
     void disconnectRequestResponse(const QString &requestPath, const char *slot);
@@ -94,6 +107,9 @@ private:
     QString m_createRequestPath;
     QString m_bindRequestPath;
     quint64 m_generation = 0;
+    QElapsedTimer m_activationClock;
+    qint64 m_lastReplayActivationMs = -1000;
+    qint64 m_lastScreenshotActivationMs = -1000;
     QString m_triggerDescription = QStringLiteral("F8");
     QString m_screenshotTriggerDescription = QStringLiteral("F9");
     QString m_statusMessage = QStringLiteral("Global shortcut is not enabled");

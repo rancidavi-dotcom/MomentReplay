@@ -3,6 +3,7 @@ import QtQuick.Controls.Fusion
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtMultimedia
+import "Localization.js" as Localization
 
 ApplicationWindow {
     id: window
@@ -10,8 +11,9 @@ ApplicationWindow {
     height: 820
     minimumWidth: 980
     minimumHeight: 660
-    visible: true
-    title: "Moment"
+    property bool startHidden: false
+    visible: !startHidden
+    title: window.tr("Moment")
     color: "#10151b"
     font.family: "Noto Sans"
     font.pixelSize: 13
@@ -54,7 +56,7 @@ ApplicationWindow {
     Dialog {
         id: windowsShortcutDialog
         objectName: "windowsShortcutDialog"
-        title: "Capture shortcuts"
+        title: window.tr("Capture shortcuts")
         anchors.centerIn: parent
         width: Math.min(window.width - 40, 440)
         modal: true
@@ -64,17 +66,17 @@ ApplicationWindow {
         }
         contentItem: ColumnLayout {
             spacing: 12
-            Label { text: "Global keys work while Moment is in the background."; wrapMode: Text.Wrap; Layout.fillWidth: true; color: window.muted }
-            Label { text: "Save replay"; color: window.ink }
-            TextField { id: replayShortcutField; objectName: "windowsReplayShortcutField"; Layout.fillWidth: true; placeholderText: "F8 or Ctrl+Shift+F8" }
-            Label { text: "Take screenshot"; color: window.ink }
-            TextField { id: screenshotShortcutField; Layout.fillWidth: true; placeholderText: "F9 or Ctrl+Shift+F9" }
+            Label { text: window.tr("Global keys work while Moment is in the background."); wrapMode: Text.Wrap; Layout.fillWidth: true; color: window.muted }
+            Label { text: window.tr("Save replay"); color: window.ink }
+            TextField { id: replayShortcutField; objectName: "windowsReplayShortcutField"; Layout.fillWidth: true; placeholderText: window.tr("F8 or Ctrl+Shift+F8") }
+            Label { text: window.tr("Take screenshot"); color: window.ink }
+            TextField { id: screenshotShortcutField; Layout.fillWidth: true; placeholderText: window.tr("F9 or Ctrl+Shift+F9") }
             Label { text: globalShortcuts.statusMessage; wrapMode: Text.Wrap; Layout.fillWidth: true; color: window.muted }
             RowLayout {
                 Layout.alignment: Qt.AlignRight
-                Button { text: "Cancel"; onClicked: windowsShortcutDialog.close() }
+                Button { text: window.tr("Cancel"); onClicked: windowsShortcutDialog.close() }
                 Button {
-                    text: "Save shortcuts"
+                    text: window.tr("Save shortcuts")
                     onClicked: {
                         if (window.windowsDesktop && globalShortcuts.setCaptureShortcuts(replayShortcutField.text, screenshotShortcutField.text))
                             windowsShortcutDialog.close()
@@ -89,6 +91,8 @@ ApplicationWindow {
         interval: 2200
         onTriggered: window.shareSettingsHighlighted = false
     }
+
+    function tr(source) { return Localization.translate(source, recordingPreferences.language) }
 
     function openShareSettings() {
         page = 2
@@ -155,7 +159,7 @@ ApplicationWindow {
 
     FileDialog {
         id: importDialog
-        title: "Import media to Moment"
+        title: window.tr("Import media to Moment")
         fileMode: FileDialog.OpenFiles
         nameFilters: ["Videos and images (*.mp4 *.m4v *.mkv *.mov *.webm *.avi *.mpg *.mpeg *.ts *.mts *.ogv *.png *.jpg *.jpeg)", "All files (*)"]
         onAccepted: {
@@ -166,7 +170,7 @@ ApplicationWindow {
 
     FileDialog {
         id: editorVideoDialog
-        title: "Choose a video to edit"
+        title: window.tr("Choose a video to edit")
         fileMode: FileDialog.OpenFile
         nameFilters: ["Videos (*.mp4 *.m4v *.mkv *.mov *.webm *.avi *.mpg *.mpeg *.ts *.mts *.ogv)", "All files (*)"]
         onAccepted: {
@@ -192,7 +196,7 @@ ApplicationWindow {
         id: messageDialog
         property string message: ""
         modal: true
-        title: "Moment"
+        title: window.tr("Moment")
         standardButtons: Dialog.Ok
         anchors.centerIn: parent
         width: 420
@@ -208,15 +212,29 @@ ApplicationWindow {
         id: removeDialog
         property int clipId: 0
         modal: true
-        title: "Remove from library?"
+        title: window.tr("Remove from library?")
         standardButtons: Dialog.Cancel | Dialog.Ok
         anchors.centerIn: parent
         width: 420
         contentItem: Label {
-            text: "This removes the entry from Moment. The media file remains on disk."
+            text: window.tr("This removes the entry from Moment. The media file remains on disk.")
             color: window.ink; wrapMode: Text.Wrap; width: 360
         }
         onAccepted: clipLibrary.removeFromLibrary(clipId)
+    }
+
+    Dialog {
+        id: updateRestartDialog
+        modal: true
+        title: window.tr("Restart Moment?")
+        standardButtons: Dialog.Cancel | Dialog.Ok
+        anchors.centerIn: parent
+        width: 430
+        contentItem: Label {
+            text: window.tr("The update is installed. Restart Moment now to finish. The unsaved replay buffer will be cleared.")
+            color: window.ink; wrapMode: Text.Wrap; width: 370
+        }
+        onAccepted: updateChecker.restartToApply()
     }
 
     Connections {
@@ -303,6 +321,11 @@ ApplicationWindow {
             } else if (name === "shield") {
                 ctx.beginPath(); ctx.moveTo(12, 3); ctx.lineTo(20, 6); ctx.lineTo(19, 14); ctx.quadraticCurveTo(17, 19, 12, 22); ctx.quadraticCurveTo(7, 19, 5, 14); ctx.lineTo(4, 6); ctx.closePath(); ctx.stroke()
                 ctx.beginPath(); ctx.moveTo(8, 12); ctx.lineTo(11, 15); ctx.lineTo(16, 9); ctx.stroke()
+            } else if (name === "friends") {
+                ctx.beginPath(); ctx.arc(9, 8, 3.5, 0, Math.PI * 2); ctx.stroke()
+                ctx.beginPath(); ctx.arc(17, 9, 2.8, 0, Math.PI * 2); ctx.stroke()
+                ctx.beginPath(); ctx.moveTo(2.5, 20); ctx.quadraticCurveTo(3, 14, 9, 14); ctx.quadraticCurveTo(15, 14, 15.5, 20); ctx.stroke()
+                ctx.beginPath(); ctx.moveTo(15, 15); ctx.quadraticCurveTo(21, 14, 22, 20); ctx.stroke()
             }
         }
     }
@@ -406,8 +429,8 @@ ApplicationWindow {
         }
         Label { x: 16; y: 0; text: trimTimeline.durationMs > 0 ? "00:00.00" : "—"; color: window.muted; font.pixelSize: 9 }
         Label { x: Math.max(16, trimTimeline.width - width - 16); y: 0; text: window.formatTime(trimTimeline.durationMs); color: window.muted; font.pixelSize: 9 }
-        Label { x: 16; y: 55; text: "IN  " + window.formatTime(trimTimeline.inMs); color: window.accent; font.pixelSize: 9; font.bold: true }
-        Label { x: Math.max(16, trimTimeline.width - width - 16); y: 55; text: "OUT  " + window.formatTime(trimTimeline.outMs); color: window.accent; font.pixelSize: 9; font.bold: true }
+        Label { x: 16; y: 55; text: window.tr("IN  ") + window.formatTime(trimTimeline.inMs); color: window.accent; font.pixelSize: 9; font.bold: true }
+        Label { x: Math.max(16, trimTimeline.width - width - 16); y: 55; text: window.tr("OUT  ") + window.formatTime(trimTimeline.outMs); color: window.accent; font.pixelSize: 9; font.bold: true }
     }
 
     component MomentProgress: ProgressBar {
@@ -443,7 +466,7 @@ ApplicationWindow {
     component NavButton: Button {
         id: nav
         property bool selected: false
-        property string label: ""
+        property string label: window.tr("")
         property string iconText: ""
         Layout.fillWidth: true
         implicitHeight: 47
@@ -497,15 +520,16 @@ ApplicationWindow {
                     }
                     Column {
                         spacing: 1
-                        Label { text: "moment"; color: window.ink; font.weight: Font.DemiBold; font.pixelSize: 21; font.letterSpacing: -0.6 }
-                        Label { text: "Desktop capture"; color: window.muted; font.pixelSize: 9 }
+                        Label { text: window.tr("moment"); color: window.ink; font.weight: Font.DemiBold; font.pixelSize: 21; font.letterSpacing: -0.6 }
+                        Label { text: window.tr("Desktop capture"); color: window.muted; font.pixelSize: 9 }
                     }
                 }
-                SectionTitle { text: "WORKSPACE"; Layout.leftMargin: 12; Layout.bottomMargin: 4 }
-                NavButton { label: "Library"; iconText: "library"; selected: window.page === 0; onClicked: window.page = 0 }
-                NavButton { label: "Capture"; iconText: "capture"; selected: window.page === 1; onClicked: window.page = 1 }
-                NavButton { objectName: "editorNavButton"; label: "Editor"; iconText: "play"; selected: window.page === 3; onClicked: window.navigateToEditor() }
-                NavButton { label: "Preferences"; iconText: "settings"; selected: window.page === 2; onClicked: window.page = 2 }
+                SectionTitle { text: window.tr("WORKSPACE"); Layout.leftMargin: 12; Layout.bottomMargin: 4 }
+                NavButton { label: window.tr("Library"); iconText: "library"; selected: window.page === 0; onClicked: window.page = 0 }
+                NavButton { label: window.tr("Capture"); iconText: "capture"; selected: window.page === 1; onClicked: window.page = 1 }
+                NavButton { objectName: "editorNavButton"; label: window.tr("Editor"); iconText: "play"; selected: window.page === 3; onClicked: window.navigateToEditor() }
+                NavButton { label: window.tr("Preferences"); iconText: "settings"; selected: window.page === 2; onClicked: window.page = 2 }
+                NavButton { objectName: "friendsNavButton"; label: window.tr("Friends"); iconText: "friends"; selected: window.page === 4; onClicked: window.page = 4 }
                 Item { Layout.fillHeight: true }
                 Rectangle {
                     Layout.fillWidth: true; implicitHeight: 100
@@ -513,21 +537,21 @@ ApplicationWindow {
                     border.color: screenRecorder.buffering ? "#324f3b" : window.line
                     ColumnLayout {
                         anchors.fill: parent; anchors.margins: 14; spacing: 9
-                        SectionTitle { text: "CAPTURE STATUS"; color: "#91a99a" }
+                        SectionTitle { text: window.tr("CAPTURE STATUS"); color: "#91a99a" }
                         RowLayout {
                             Layout.fillWidth: true; spacing: 7
                             Rectangle { width: 6; height: 6; radius: 3; color: screenRecorder.buffering ? window.accent : "#efbd68" }
-                            Label { text: screenRecorder.buffering ? "Replay active" : screenRecorder.busy ? (window.windowsDesktop ? "Starting capture" : "Awaiting permission") : "Capture idle"; color: window.ink; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
+                            Label { text: window.tr(screenRecorder.buffering ? "Replay active" : screenRecorder.busy ? (window.windowsDesktop ? "Starting capture" : "Awaiting permission") : "Capture idle"); color: window.ink; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
                             Label { text: screenRecorder.buffering ? screenRecorder.bufferedSeconds + "s" : ""; color: window.accent; font.pixelSize: 11; font.bold: true }
                         }
                         MomentProgress { Layout.fillWidth: true; from: 0; to: Math.max(1, screenRecorder.bufferSeconds); value: Math.min(screenRecorder.bufferedSeconds, to) }
-                        Label { text: "Up to " + screenRecorder.bufferSeconds + " seconds in memory"; color: "#8da397"; font.pixelSize: 9 }
+                        Label { text: window.tr("Up to ") + screenRecorder.bufferSeconds + window.tr(" seconds in memory"); color: "#8da397"; font.pixelSize: 9 }
                     }
                 }
                 RowLayout {
                     Layout.fillWidth: true; Layout.topMargin: 7; Layout.bottomMargin: 4; spacing: 9
                     MomentIcon { name: "shield"; ink: "#718899"; Layout.preferredWidth: 18; Layout.preferredHeight: 18 }
-                    Label { Layout.fillWidth: true; text: "Local files"; color: "#8296a7"; wrapMode: Text.Wrap; font.pixelSize: 9 }
+                    Label { Layout.fillWidth: true; text: window.tr("Local files"); color: "#8296a7"; wrapMode: Text.Wrap; font.pixelSize: 9 }
                 }
             }
         }
@@ -553,12 +577,12 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             ColumnLayout {
                                 spacing: 5
-                                Label { text: "Library"; color: window.ink; font.pixelSize: 26; font.weight: Font.DemiBold; font.letterSpacing: -0.7 }
-                                Label { text: clipLibrary.clipCount + (clipLibrary.clipCount === 1 ? " item" : " items") + " · local library"; color: window.muted; font.pixelSize: 11 }
+                                Label { text: window.tr("Library"); color: window.ink; font.pixelSize: 26; font.weight: Font.DemiBold; font.letterSpacing: -0.7 }
+                                Label { text: clipLibrary.clipCount + " " + window.tr(clipLibrary.clipCount === 1 ? "item" : "items") + window.tr(" · local library"); color: window.muted; font.pixelSize: 11 }
                             }
                             Item { Layout.fillWidth: true }
                             Button {
-                                text: "＋  Import media"
+                                text: window.tr("＋  Import media")
                                 implicitHeight: 38; leftPadding: 16; rightPadding: 16
                                 onClicked: importDialog.open()
                                 contentItem: Label { text: parent.text; color: window.ink; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
@@ -573,7 +597,7 @@ ApplicationWindow {
                                     anchors.fill: parent; anchors.margins: 16; spacing: 14
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        Label { text: "Media"; color: window.ink; font.pixelSize: 13; font.weight: Font.DemiBold }
+                                        Label { text: window.tr("Media"); color: window.ink; font.pixelSize: 13; font.weight: Font.DemiBold }
                                         Item { Layout.fillWidth: true }
                                         Rectangle {
                                             implicitWidth: 28; implicitHeight: 23; radius: 5; color: "#26343e"
@@ -584,7 +608,7 @@ ApplicationWindow {
                                         objectName: "librarySearch"
                                         Layout.fillWidth: true
                                         implicitHeight: 39; leftPadding: 35
-                                        placeholderText: "Search media"
+                                        placeholderText: window.tr("Search media")
                                         color: window.ink; placeholderTextColor: "#748091"
                                         onTextChanged: clipLibrary.searchQuery = text
                                         MomentIcon { name: "search"; width: 15; height: 15; anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; ink: "#7d93a5" }
@@ -633,7 +657,7 @@ ApplicationWindow {
                                                 }
                                                 ToolButton {
                                                     implicitWidth: 22; implicitHeight: 30; padding: 0
-                                                    text: "···"
+                                                    text: window.tr("···")
                                                     onClicked: { removeDialog.clipId = clipId; removeDialog.open() }
                                                     contentItem: Label { text: parent.text; color: "#90a6b7"; font.pixelSize: 15; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                                 }
@@ -670,7 +694,7 @@ ApplicationWindow {
                                         Label {
                                             anchors.centerIn: parent; width: parent.width - 36
                                             visible: clipList.count === 0
-                                            text: clipLibrary.searchQuery.length ? "No matching media." : "No media yet.\nImport a file or save a replay."
+                                            text: window.tr(clipLibrary.searchQuery.length ? "No matching media." : "No media yet.\nImport a file or save a replay.")
                                             color: window.muted; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; font.pixelSize: 12
                                         }
                                     }
@@ -682,10 +706,10 @@ ApplicationWindow {
                                     anchors.fill: parent; anchors.margins: 18; spacing: 12
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        SectionTitle { text: "PREVIEW" }
+                                        SectionTitle { text: window.tr("PREVIEW") }
                                         Item { Layout.fillWidth: true }
                                         Button {
-                                            text: "Edit clip"
+                                            text: window.tr("Edit clip")
                                             enabled: window.activeSource.toString().length > 0 && !window.activeIsImage
                                             implicitHeight: 30; leftPadding: 12; rightPadding: 12
                                             onClicked: window.openEditor()
@@ -694,11 +718,11 @@ ApplicationWindow {
                                         }
                                         Button {
                                             objectName: "createClipShareLinkButton"
-                                            text: driveShare.busy ? "Sharing…" : driveShare.connected ? "Create link" : "Share clip"
+                                            text: window.tr(driveShare.busy ? "Sharing…" : driveShare.connected ? "Create link" : "Share clip")
                                             enabled: window.activeSource.toString().length > 0 && !window.activeIsImage && !driveShare.busy
                                             implicitHeight: 30; leftPadding: 12; rightPadding: 12
                                             ToolTip.visible: hovered && !driveShare.configured
-                                            ToolTip.text: "Drive sharing will be available when Moment's OAuth app is configured."
+                                            ToolTip.text: window.tr("Drive sharing will be available when Moment's OAuth app is configured.")
                             onClicked: {
                                 if (!driveShare.configured)
                                     window.openShareSettings()
@@ -708,7 +732,7 @@ ApplicationWindow {
                                             contentItem: Label { text: parent.text; color: parent.enabled ? window.ink : window.muted; font.pixelSize: 10; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                             background: Rectangle { radius: 7; color: window.actionButtonFill(parent, "#22352c", "#1b252e"); border.color: parent.hovered ? "#9dd565" : parent.enabled ? "#405d45" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
                                         }
-                                        Label { text: player.playbackState === MediaPlayer.PlayingState ? "PLAYING" : window.activeSource.toString().length ? (window.activeIsImage ? "IMAGE" : "VIDEO") : "READY WHEN YOU ARE"; color: player.playbackState === MediaPlayer.PlayingState ? window.accent : "#8097a8"; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
+                                        Label { text: window.tr(player.playbackState === MediaPlayer.PlayingState ? "PLAYING" : window.activeSource.toString().length ? (window.activeIsImage ? "IMAGE" : "VIDEO") : "READY WHEN YOU ARE"); color: player.playbackState === MediaPlayer.PlayingState ? window.accent : "#8097a8"; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
                                     }
                                     Rectangle {
                                         Layout.fillWidth: true; Layout.fillHeight: true; radius: 12; color: "#0c141d"; clip: true
@@ -720,11 +744,11 @@ ApplicationWindow {
                                                 anchors.horizontalCenter: parent.horizontalCenter; width: 64; height: 64; radius: 20; color: "#1d302c"; border.color: "#3b5543"
                                                 MomentIcon { anchors.centerIn: parent; width: 25; height: 25; name: "play"; ink: window.accent }
                                             }
-                                            Label { width: parent.width; text: "Select media to preview"; color: window.ink; font.pixelSize: 15; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap }
-                                            Label { width: parent.width; text: "Choose a video or image from the list."; color: "#8198aa"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; lineHeight: 1.4 }
+                                            Label { width: parent.width; text: window.tr("Select media to preview"); color: window.ink; font.pixelSize: 15; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap }
+                                            Label { width: parent.width; text: window.tr("Choose a video or image from the list."); color: "#8198aa"; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; lineHeight: 1.4 }
                                         }
                                     }
-                                    Label { Layout.fillWidth: true; text: window.activeSource.toString().length ? window.activeSource.toString().split("/").pop() : "Nothing selected yet"; color: window.activeSource.toString().length ? window.ink : window.muted; elide: Text.ElideMiddle; font.pixelSize: 12; font.weight: Font.DemiBold }
+                                    Label { Layout.fillWidth: true; text: window.activeSource.toString().length ? window.activeSource.toString().split("/").pop() : window.tr("Nothing selected yet"); color: window.activeSource.toString().length ? window.ink : window.muted; elide: Text.ElideMiddle; font.pixelSize: 12; font.weight: Font.DemiBold }
                                     RowLayout {
                                         Layout.fillWidth: true
                                         ToolButton { text: player.playbackState === MediaPlayer.PlayingState ? "Ⅱ" : "▶"; enabled: window.activeSource.toString().length > 0 && !window.activeIsImage; onClicked: player.playbackState === MediaPlayer.PlayingState ? player.pause() : player.play(); palette.buttonText: window.accent }
@@ -739,7 +763,7 @@ ApplicationWindow {
                                             objectName: "clipShareStatus"
                                             Layout.fillWidth: true
                                             visible: window.activeSource.toString().length > 0
-                                            text: driveShare.statusMessage
+                                            text: window.tr(driveShare.statusMessage)
                                             color: driveShare.lastShareUrl.length > 0 ? window.accent : window.muted
                                             font.pixelSize: 11; wrapMode: Text.Wrap
                                         }
@@ -758,7 +782,7 @@ ApplicationWindow {
                                             }
                                             Button {
                                                 objectName: "copyClipShareLinkButton"
-                                                text: "Copy link"
+                                                text: window.tr("Copy link")
                                                 onClicked: driveShare.copyLastShareUrl()
                                                 contentItem: Label {
                                                     text: parent.text
@@ -797,8 +821,8 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 ColumnLayout {
                                     spacing: 3
-                                    Label { text: "Capture"; color: window.ink; font.pixelSize: 26; font.weight: Font.DemiBold; font.letterSpacing: -0.3 }
-                                    Label { text: "Replay buffer and continuous recording."; color: window.muted; font.pixelSize: 12 }
+                                    Label { text: window.tr("Capture"); color: window.ink; font.pixelSize: 26; font.weight: Font.DemiBold; font.letterSpacing: -0.3 }
+                                    Label { text: window.tr("Replay buffer and continuous recording."); color: window.muted; font.pixelSize: 12 }
                                 }
                                 Item { Layout.fillWidth: true }
                                 Rectangle {
@@ -808,10 +832,10 @@ ApplicationWindow {
                                         id: statusRow; anchors.centerIn: parent; spacing: 8
                                         Rectangle { width: 7; height: 7; radius: 4; color: screenRecorder.buffering ? window.accent : "#778393" }
                                         Label {
-                                            text: screenRecorder.recording ? "Recording session"
+                                            text: window.tr(screenRecorder.recording ? "Recording session"
                                                   : screenRecorder.buffering ? "Replay window active"
                                                   : screenRecorder.busy ? (window.windowsDesktop ? "Starting screen capture" : "Waiting for screen permission")
-                                                  : "Capture stopped"
+                                                  : "Capture stopped")
                                             color: window.ink; font.pixelSize: 10
                                         }
                                     }
@@ -823,16 +847,16 @@ ApplicationWindow {
                                     anchors.fill: parent; anchors.margins: 24; spacing: 25
                                     ColumnLayout {
                                         Layout.fillWidth: true; Layout.fillHeight: true; spacing: 12
-                                        SectionTitle { text: "INSTANT REPLAY" }
-                                        Label { text: "Replay buffer"; color: window.ink; font.pixelSize: 23; font.weight: Font.DemiBold }
+                                        SectionTitle { text: window.tr("INSTANT REPLAY") }
+                                        Label { text: window.tr("Replay buffer"); color: window.ink; font.pixelSize: 23; font.weight: Font.DemiBold }
                                         Label {
                                             Layout.fillWidth: true
-                                            text: "Save the recent " + recordingPreferences.effectiveReplayClipSeconds + " seconds without interrupting the current session."
+                                            text: window.tr("Save the recent ") + recordingPreferences.effectiveReplayClipSeconds + window.tr(" seconds without interrupting the current session.")
                                             color: window.muted; wrapMode: Text.Wrap; font.pixelSize: 12
                                         }
                                         RowLayout {
                                             Layout.fillWidth: true; spacing: 8
-                                            Label { text: "Window"; color: window.muted; font.pixelSize: 11 }
+                                            Label { text: window.tr("Window"); color: window.muted; font.pixelSize: 11 }
                                             SettingCombo {
                                                 id: captureDuration
                                                 model: [15, 30, 60, 90, 120]
@@ -852,7 +876,7 @@ ApplicationWindow {
                                                 implicitHeight: 40; leftPadding: 14; rightPadding: 14
                                                 visible: !screenRecorder.buffering && !screenRecorder.busy
                                                 enabled: visible
-                                                text: "Retry screen capture"
+                                                text: window.tr("Retry screen capture")
                                                 onClicked: screenRecorder.startBuffering()
                                                 contentItem: Label { text: parent.text; color: window.ink; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                                 background: Rectangle { radius: 9; color: window.actionButtonFill(parent, "#202833", "#202833"); border.color: parent.hovered ? "#627282" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
@@ -861,7 +885,7 @@ ApplicationWindow {
                                                 implicitHeight: 40; leftPadding: 14; rightPadding: 14
                                                 Layout.fillWidth: true
                                                 enabled: screenRecorder.buffering && screenRecorder.bufferedSeconds > 0 && !screenRecorder.replayExporting
-                                                text: screenRecorder.replayExporting ? "Saving…" : "Save last " + Math.min(recordingPreferences.effectiveReplayClipSeconds, screenRecorder.bufferedSeconds) + " sec"
+                                                text: screenRecorder.replayExporting ? window.tr("Saving…") : window.tr("Save last ") + Math.min(recordingPreferences.effectiveReplayClipSeconds, screenRecorder.bufferedSeconds) + window.tr(" sec")
                                                 onClicked: screenRecorder.saveReplayClip(recordingPreferences.effectiveReplayClipSeconds)
                                                 contentItem: Label { text: parent.text; color: window.ink; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                                 background: Rectangle { radius: 10; color: window.actionButtonFill(parent, "#2e4934", "#202d36"); border.color: parent.hovered ? "#8dbb62" : parent.enabled ? "#55734a" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
@@ -869,14 +893,14 @@ ApplicationWindow {
                                             Button {
                                                 implicitHeight: 40; leftPadding: 14; rightPadding: 14
                                                 enabled: screenRecorder.frameAvailable
-                                                text: "Screenshot"
+                                                text: window.tr("Screenshot")
                                                 onClicked: screenRecorder.saveScreenshot()
                                                 contentItem: Label { text: parent.text; color: window.ink; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                                 background: Rectangle { radius: 9; color: window.actionButtonFill(parent, "#202833", "#1a2029"); border.color: parent.hovered ? "#627282" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
                                             }
                                             Button {
                                                 implicitHeight: 40; leftPadding: 14; rightPadding: 14
-                                                text: "Stop"
+                                                text: window.tr("Stop")
                                                 enabled: screenRecorder.buffering
                                                 onClicked: screenRecorder.stopCapture()
                                                 contentItem: Label { text: parent.text; color: window.ink; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
@@ -887,9 +911,9 @@ ApplicationWindow {
                                     Rectangle { Layout.preferredWidth: 1; Layout.fillHeight: true; color: window.line }
                                     ColumnLayout {
                                         Layout.preferredWidth: 205; Layout.fillHeight: true; spacing: 11
-                                        SectionTitle { text: "BUFFER STATUS" }
+                                        SectionTitle { text: window.tr("BUFFER STATUS") }
                                         Label { text: screenRecorder.buffering ? "Live" : "Off"; color: screenRecorder.buffering ? window.accent : window.muted; font.pixelSize: 26; font.bold: true }
-                                        Label { Layout.fillWidth: true; text: screenRecorder.statusMessage; color: window.muted; wrapMode: Text.Wrap; font.pixelSize: 11 }
+                                        Label { Layout.fillWidth: true; text: window.tr(screenRecorder.statusMessage); color: window.muted; wrapMode: Text.Wrap; font.pixelSize: 11 }
                                         Item { Layout.fillHeight: true }
                                         Label {
                                             Layout.fillWidth: true
@@ -911,16 +935,16 @@ ApplicationWindow {
                                     anchors.fill: parent; anchors.margins: 24; spacing: 24
                                     ColumnLayout {
                                         Layout.fillWidth: true; spacing: 10
-                                        SectionTitle { text: "FULL SESSION" }
-                                        Label { text: "Record from now"; color: window.ink; font.pixelSize: 19; font.bold: true }
-                                        Label { Layout.fillWidth: true; text: "Capture a continuous screen recording. Finished files are added to your local library."; color: window.muted; wrapMode: Text.Wrap; font.pixelSize: 12 }
+                                        SectionTitle { text: window.tr("FULL SESSION") }
+                                        Label { text: window.tr("Record from now"); color: window.ink; font.pixelSize: 19; font.bold: true }
+                                        Label { Layout.fillWidth: true; text: window.tr("Capture a continuous screen recording. Finished files are added to your local library."); color: window.muted; wrapMode: Text.Wrap; font.pixelSize: 12 }
                                     }
                                     ColumnLayout {
                                         Layout.preferredWidth: 220; spacing: 9
                                         Button {
                                             implicitHeight: 40; leftPadding: 14; rightPadding: 14
                                             Layout.fillWidth: true; enabled: !screenRecorder.recording && !screenRecorder.replayExporting && (!screenRecorder.busy || screenRecorder.buffering)
-                                            text: "Start session recording"
+                                            text: window.tr("Start session recording")
                                             onClicked: screenRecorder.startRecording()
                                             contentItem: Label { text: parent.text; color: "#172111"; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                             background: Rectangle { radius: 9; color: window.actionButtonFill(parent, window.accent, "#53604b"); Behavior on color { ColorAnimation { duration: 100 } } }
@@ -928,7 +952,7 @@ ApplicationWindow {
                                         Button {
                                             implicitHeight: 40; leftPadding: 14; rightPadding: 14
                                             Layout.fillWidth: true; enabled: screenRecorder.recording
-                                            text: "Finish and save"
+                                            text: window.tr("Finish and save")
                                             onClicked: screenRecorder.stopRecording()
                                             contentItem: Label { text: parent.text; color: window.ink; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                             background: Rectangle { radius: 9; color: window.actionButtonFill(parent, "#293846", "#293846"); border.color: parent.hovered ? "#627889" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
@@ -962,8 +986,26 @@ ApplicationWindow {
                         spacing: 18
                         ColumnLayout {
                             spacing: 3
-                            Label { text: "Preferences"; color: window.ink; font.pixelSize: 26; font.weight: Font.DemiBold; font.letterSpacing: -0.3 }
-                            Label { text: "Recording, audio and keyboard shortcuts."; color: window.muted; font.pixelSize: 12 }
+                            Label { text: window.tr("Preferences"); color: window.ink; font.pixelSize: 26; font.weight: Font.DemiBold; font.letterSpacing: -0.3 }
+                            Label { text: window.tr("Recording, audio and keyboard shortcuts."); color: window.muted; font.pixelSize: 12 }
+                        }
+                        Surface {
+                            Layout.fillWidth: true
+                            implicitHeight: 92
+                            RowLayout {
+                                anchors.fill: parent; anchors.margins: 20; spacing: 16
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 3
+                                    SectionTitle { text: window.tr("LANGUAGE") }
+                                    Label { text: window.tr("Choose the language used by Moment."); color: window.muted; font.pixelSize: 11; wrapMode: Text.Wrap }
+                                }
+                                SettingCombo {
+                                    Layout.preferredWidth: 190
+                                    model: ["English", "Português (Brasil)"]
+                                    currentIndex: recordingPreferences.language === "pt_BR" ? 1 : 0
+                                    onActivated: recordingPreferences.language = currentIndex === 1 ? "pt_BR" : "en"
+                                }
+                            }
                         }
                         Surface {
                             Layout.fillWidth: true
@@ -976,7 +1018,7 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     ColumnLayout {
                                         Layout.fillWidth: true; spacing: 4
-                                        SectionTitle { text: "GAME PROFILES" }
+                                        SectionTitle { text: window.tr("GAME PROFILES") }
                                         Label {
                                             Layout.fillWidth: true
                                             text: gameMonitor.activeGameName.length
@@ -996,7 +1038,7 @@ ApplicationWindow {
                                         onActivated: selectedGameProcess = String(currentValue)
                                     }
                                     Button {
-                                        text: "Add detected"
+                                        text: window.tr("Add detected")
                                         enabled: gameMonitor.runningGameCandidates.length > 0
                                         onClicked: {
                                             const process = selectedGameProcess.length ? selectedGameProcess : String(runningGamesCombo.currentValue)
@@ -1010,12 +1052,12 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     TextField {
                                         Layout.fillWidth: true
-                                        placeholderText: "Or enter executable name (for example: game.exe or game-bin)"
+                                        placeholderText: window.tr("Or enter executable name (for example: game.exe or game-bin)")
                                         text: manualGameProcess
                                         onTextChanged: manualGameProcess = text
                                     }
                                     Button {
-                                        text: "Add manually"
+                                        text: window.tr("Add manually")
                                         enabled: manualGameProcess.trim().length > 0
                                         onClicked: {
                                             if (gameMonitor.addProfile(manualGameProcess.trim())) manualGameProcess = ""
@@ -1026,7 +1068,7 @@ ApplicationWindow {
                                 }
                                 Label {
                                     Layout.fillWidth: true
-                                    text: "Profiles match the executable name. Automatic session recording starts and stops with a matching process only when enabled below."
+                                    text: window.tr("Profiles match the executable name. Automatic session recording starts and stops with a matching process only when enabled below.")
                                     color: window.muted; font.pixelSize: 10; wrapMode: Text.Wrap
                                 }
                                 Repeater {
@@ -1053,12 +1095,12 @@ ApplicationWindow {
                                                     Label { text: processName; color: window.muted; font.pixelSize: 10 }
                                                 }
                                                 MomentSwitch {
-                                                    text: checked ? "Auto record" : "Manual capture"
+                                                    text: window.tr(checked ? "Auto record" : "Manual capture")
                                                     checked: autoRecord
                                                     onToggled: gameMonitor.setProfileAutoRecord(index, checked)
                                                 }
                                                 ToolButton {
-                                                    text: "Remove"
+                                                    text: window.tr("Remove")
                                                     onClicked: gameMonitor.removeProfile(index)
                                                     contentItem: Label { text: parent.text; color: "#d39481"; font.pixelSize: 10; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                                     background: Rectangle { radius: 6; color: parent.hovered ? "#382823" : "transparent" }
@@ -1069,25 +1111,25 @@ ApplicationWindow {
                                                 SettingCombo {
                                                     id: profileFps
                                                     Layout.fillWidth: true; model: [30, 60]; currentIndex: frameRate === 60 ? 1 : 0
-                                                    displayText: "FPS · " + currentText
+                                                    displayText: window.tr("FPS · ") + currentText
                                                     onActivated: gameMonitor.setProfileSettings(index, Number(currentValue), profileQuality.currentIndex, Number(profileReplay.currentValue), Number(profileClip.currentValue))
                                                 }
                                                 SettingCombo {
                                                     id: profileQuality
-                                                    Layout.fillWidth: true; model: ["Very low", "Low", "Standard", "High", "Very high"]; currentIndex: quality
-                                                    displayText: "Quality · " + currentText
+                                                    Layout.fillWidth: true; model: recordingPreferences.language === "pt_BR" ? ["Muito baixa", "Baixa", "Padrão", "Alta", "Muito alta"] : ["Very low", "Low", "Standard", "High", "Very high"]; currentIndex: quality
+                                                    displayText: window.tr("Quality · ") + currentText
                                                     onActivated: gameMonitor.setProfileSettings(index, Number(profileFps.currentValue), currentIndex, Number(profileReplay.currentValue), Number(profileClip.currentValue))
                                                 }
                                                 SettingCombo {
                                                     id: profileReplay
                                                     Layout.fillWidth: true; model: [15, 30, 60, 90, 120]; currentIndex: Math.max(0, model.indexOf(replaySeconds))
-                                                    displayText: "Buffer · " + currentText + "s"
+                                                    displayText: window.tr("Buffer · ") + currentText + "s"
                                                     onActivated: gameMonitor.setProfileSettings(index, Number(profileFps.currentValue), profileQuality.currentIndex, Number(currentValue), Number(profileClip.currentValue))
                                                 }
                                                 SettingCombo {
                                                     id: profileClip
                                                     Layout.fillWidth: true; model: [15, 30, 60, 90, 120]; currentIndex: Math.max(0, model.indexOf(replayClipSeconds))
-                                                    displayText: "Clip · " + currentText + "s"
+                                                    displayText: window.tr("Clip · ") + currentText + "s"
                                                     onActivated: gameMonitor.setProfileSettings(index, Number(profileFps.currentValue), profileQuality.currentIndex, Number(profileReplay.currentValue), Number(currentValue))
                                                 }
                                             }
@@ -1097,7 +1139,7 @@ ApplicationWindow {
                                 Label {
                                     visible: gameMonitor.profileCount === 0
                                     Layout.fillWidth: true
-                                    text: "Add a running game above to create its first profile."
+                                    text: window.tr("Add a running game above to create its first profile.")
                                     color: window.muted; font.pixelSize: 11
                                 }
                             }
@@ -1112,12 +1154,12 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     ColumnLayout {
                                         Layout.fillWidth: true; spacing: 4
-                                        SectionTitle { text: "DISCORD" }
-                                        Label { text: "Game presence runs automatically"; color: window.ink; font.pixelSize: 14; font.bold: true }
+                                        SectionTitle { text: window.tr("DISCORD") }
+                                        Label { text: window.tr("Game presence runs automatically"); color: window.ink; font.pixelSize: 14; font.bold: true }
                                     }
                                     MomentSwitch {
                                         objectName: "discordPresenceToggle"
-                                        text: checked ? "Sharing on" : "Sharing off"
+                                        text: window.tr(checked ? "Sharing on" : "Sharing off")
                                         checked: discordPresence.enabled
                                         onToggled: discordPresence.setEnabled(checked)
                                     }
@@ -1153,11 +1195,11 @@ ApplicationWindow {
                                 anchors.fill: parent; anchors.margins: 22; spacing: 10
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    SectionTitle { text: "CLIP SHARING" }
+                                    SectionTitle { text: window.tr("CLIP SHARING") }
                                     Item { Layout.fillWidth: true }
                                     Button {
                                         visible: driveShare.connected
-                                        text: "Disconnect"
+                                        text: window.tr("Disconnect")
                                         onClicked: driveShare.disconnectAccount()
                                         contentItem: Label { text: parent.text; color: window.ink; font.pixelSize: 10; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                         background: Rectangle { radius: 7; color: window.actionButtonFill(parent, "#1b252e", "#1b252e"); border.color: parent.hovered ? "#627889" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
@@ -1174,7 +1216,7 @@ ApplicationWindow {
                                 }
                                 Label {
                                     Layout.fillWidth: true
-                                    text: driveShare.statusMessage
+                                    text: window.tr(driveShare.statusMessage)
                                     color: driveShare.connected ? window.accent : window.muted
                                     font.pixelSize: 10; wrapMode: Text.Wrap
                                 }
@@ -1184,13 +1226,13 @@ ApplicationWindow {
                             Layout.fillWidth: true; implicitHeight: 420
                             ColumnLayout {
                                 anchors.fill: parent; anchors.margins: 22; spacing: 18
-                                SectionTitle { text: "RECORDING" }
+                                SectionTitle { text: window.tr("RECORDING") }
                                 RowLayout {
                                     Layout.fillWidth: true
                                     ColumnLayout {
                                         Layout.fillWidth: true; spacing: 3
-                                        Label { text: "Frame rate"; color: window.ink; font.pixelSize: 13; font.bold: true }
-                                        Label { Layout.fillWidth: true; text: "Target for new captures and replay exports."; color: window.muted; font.pixelSize: 11; wrapMode: Text.Wrap }
+                                        Label { text: window.tr("Frame rate"); color: window.ink; font.pixelSize: 13; font.bold: true }
+                                        Label { Layout.fillWidth: true; text: window.tr("Target for new captures and replay exports."); color: window.muted; font.pixelSize: 11; wrapMode: Text.Wrap }
                                     }
                                     SettingCombo { objectName: "frameRateSetting"; model: [30, 60]; currentIndex: recordingPreferences.frameRate === 60 ? 1 : 0; onActivated: recordingPreferences.frameRate = Number(currentValue) }
                                 }
@@ -1199,18 +1241,18 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     ColumnLayout {
                                         Layout.fillWidth: true; spacing: 3
-                                        Label { text: "Encoding quality"; color: window.ink; font.pixelSize: 13; font.bold: true }
-                                        Label { Layout.fillWidth: true; text: "Balance image detail and file size."; color: window.muted; font.pixelSize: 11; wrapMode: Text.Wrap }
+                                        Label { text: window.tr("Encoding quality"); color: window.ink; font.pixelSize: 13; font.bold: true }
+                                        Label { Layout.fillWidth: true; text: window.tr("Balance image detail and file size."); color: window.muted; font.pixelSize: 11; wrapMode: Text.Wrap }
                                     }
-                                    SettingCombo { model: ["Very low", "Low", "Standard", "High", "Very high"]; currentIndex: recordingPreferences.quality; onActivated: recordingPreferences.quality = currentIndex }
+                                    SettingCombo { model: recordingPreferences.language === "pt_BR" ? ["Muito baixa", "Baixa", "Padrão", "Alta", "Muito alta"] : ["Very low", "Low", "Standard", "High", "Very high"]; currentIndex: recordingPreferences.quality; onActivated: recordingPreferences.quality = currentIndex }
                                 }
                                 Rectangle { Layout.fillWidth: true; height: 1; color: window.line }
                                 RowLayout {
                                     Layout.fillWidth: true
                                     ColumnLayout {
                                         Layout.fillWidth: true; spacing: 3
-                                        Label { text: "Saved clip length"; color: window.ink; font.pixelSize: 13; font.bold: true }
-                                        Label { Layout.fillWidth: true; text: "How much of the recent action to save when you press the shortcut."; color: window.muted; font.pixelSize: 11; wrapMode: Text.Wrap }
+                                        Label { text: window.tr("Saved clip length"); color: window.ink; font.pixelSize: 13; font.bold: true }
+                                        Label { Layout.fillWidth: true; text: window.tr("How much of the recent action to save when you press the shortcut."); color: window.muted; font.pixelSize: 11; wrapMode: Text.Wrap }
                                     }
                                     SettingCombo {
                                         model: [15, 30, 60, 90, 120]
@@ -1223,8 +1265,8 @@ ApplicationWindow {
                                     Layout.fillWidth: true
                                     ColumnLayout {
                                         Layout.fillWidth: true; spacing: 3
-                                        Label { text: "Replay window"; color: window.ink; font.pixelSize: 13; font.bold: true }
-                                        Label { Layout.fillWidth: true; text: "How far back Moment can go when you save a replay."; color: window.muted; font.pixelSize: 11; wrapMode: Text.Wrap }
+                                        Label { text: window.tr("Replay window"); color: window.ink; font.pixelSize: 13; font.bold: true }
+                                        Label { Layout.fillWidth: true; text: window.tr("How far back Moment can go when you save a replay."); color: window.muted; font.pixelSize: 11; wrapMode: Text.Wrap }
                                     }
                                     SettingCombo { model: [15, 30, 60, 90, 120]; currentIndex: Math.max(0, model.indexOf(screenRecorder.bufferSeconds)); onActivated: screenRecorder.bufferSeconds = Number(currentValue) }
                                 }
@@ -1236,19 +1278,19 @@ ApplicationWindow {
                                 anchors.fill: parent; anchors.margins: 22; spacing: 20
                                 ColumnLayout {
                                     Layout.fillWidth: true; spacing: 6
-                                    SectionTitle { text: "AUDIO INPUT" }
-                                    Label { text: "Include audio in captures"; color: window.ink; font.pixelSize: 15; font.bold: true }
+                                    SectionTitle { text: window.tr("AUDIO INPUT") }
+                                    Label { text: window.tr("Include audio in captures"); color: window.ink; font.pixelSize: 15; font.bold: true }
                                     Label {
                                         Layout.fillWidth: true
-                                        text: "Choose a microphone or an available system-audio monitor. Audio is off until you enable it."
+                                        text: window.tr("Choose a microphone or an available system-audio monitor. Audio is off until you enable it.")
                                         color: window.muted; wrapMode: Text.Wrap; font.pixelSize: 11
                                     }
-                                    Label { Layout.fillWidth: true; text: screenRecorder.audioCaptureStatus; color: window.muted; wrapMode: Text.Wrap; font.pixelSize: 10 }
+                                    Label { Layout.fillWidth: true; text: window.tr(screenRecorder.audioCaptureStatus); color: window.muted; wrapMode: Text.Wrap; font.pixelSize: 10 }
                                 }
                                 ColumnLayout {
                                     Layout.preferredWidth: 260; spacing: 10
                                     MomentSwitch {
-                                        text: checked ? "Audio enabled" : "Audio off"
+                                        text: window.tr(checked ? "Audio enabled" : "Audio off")
                                         checked: recordingPreferences.captureAudio
                                         enabled: !screenRecorder.recording
                                         onToggled: recordingPreferences.captureAudio = checked
@@ -1259,7 +1301,7 @@ ApplicationWindow {
                                         currentIndex: screenRecorder.selectedAudioInputIndex
                                         enabled: recordingPreferences.captureAudio && !screenRecorder.recording && model.length > 0
                                         onActivated: screenRecorder.setAudioInputIndex(currentIndex)
-                                        displayText: model.length > 0 ? currentText : "No audio inputs found"
+                                        displayText: model.length > 0 ? currentText : window.tr("No audio inputs found")
                                     }
                                 }
                             }
@@ -1268,8 +1310,74 @@ ApplicationWindow {
                             Layout.fillWidth: true; implicitHeight: 120
                             ColumnLayout {
                                 anchors.fill: parent; anchors.margins: 22; spacing: 8
-                                SectionTitle { text: "LOCAL DATA" }
-                                Label { text: "Your library is stored locally. Imported files remain at their original paths; recorded sessions are saved in the Moment folder under Videos."; color: window.muted; wrapMode: Text.Wrap; Layout.fillWidth: true; font.pixelSize: 11 }
+                                SectionTitle { text: window.tr("LOCAL DATA") }
+                                Label { text: window.tr("Your library is stored locally. Imported files remain at their original paths; recorded sessions are saved in the Moment folder under Videos."); color: window.muted; wrapMode: Text.Wrap; Layout.fillWidth: true; font.pixelSize: 11 }
+                            }
+                        }
+                        Surface {
+                            Layout.fillWidth: true
+                            implicitHeight: updatesColumn.implicitHeight + 44
+                            ColumnLayout {
+                                id: updatesColumn
+                                anchors.fill: parent; anchors.margins: 22; spacing: 10
+                                SectionTitle { text: window.tr("UPDATES") }
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: window.tr("Moment checks its official GitHub releases once a day. Installing an update depends on how Moment was installed.")
+                                    color: window.muted; wrapMode: Text.Wrap; font.pixelSize: 11
+                                }
+                                RowLayout {
+                                    Layout.fillWidth: true; spacing: 12
+                                    MomentSwitch {
+                                        text: window.tr("Check automatically")
+                                        checked: updateChecker.autoCheck
+                                        onToggled: updateChecker.setAutoCheck(checked)
+                                    }
+                                    Item { Layout.fillWidth: true }
+                                    Button {
+                                        text: window.tr(updateChecker.checking ? "Checking…" : "Check now")
+                                        enabled: !updateChecker.checking
+                                        onClicked: updateChecker.checkNow()
+                                        contentItem: Label { text: parent.text; color: window.ink; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                        background: Rectangle { radius: 8; color: window.actionButtonFill(parent, "#1b2934", "#1b2934"); border.color: parent.hovered ? "#627889" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
+                                    }
+                                    Button {
+                                        visible: updateChecker.updateAvailable && updateChecker.canInstallUpdate
+                                        enabled: !updateChecker.downloading
+                                        text: window.tr(updateChecker.downloading ? "Downloading update…" : "Download and install")
+                                            + (updateChecker.downloading ? " " + updateChecker.downloadPercent + "%" : "")
+                                        onClicked: updateChecker.downloadAndInstall()
+                                        contentItem: Label { text: parent.text; color: window.accent; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                        background: Rectangle { radius: 8; color: window.actionButtonFill(parent, "#263b2f", "#1b2934"); border.color: parent.hovered ? window.accent : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
+                                    }
+                                    Button {
+                                        visible: updateChecker.updateAvailable && !updateChecker.canInstallUpdate
+                                        text: window.tr("Open release")
+                                        onClicked: updateChecker.openReleasePage()
+                                        contentItem: Label { text: parent.text; color: window.accent; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                        background: Rectangle { radius: 8; color: window.actionButtonFill(parent, "#263b2f", "#1b2934"); border.color: parent.hovered ? window.accent : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
+                                    }
+                                    Button {
+                                        visible: updateChecker.restartRequired
+                                        text: window.tr("Restart Moment")
+                                        onClicked: updateRestartDialog.open()
+                                        contentItem: Label { text: parent.text; color: window.accent; font.pixelSize: 11; font.bold: true; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                        background: Rectangle { radius: 8; color: window.actionButtonFill(parent, "#263b2f", "#1b2934"); border.color: parent.hovered ? window.accent : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
+                                    }
+                                }
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: window.tr(updateChecker.status)
+                                        + (updateChecker.downloading ? " " + updateChecker.downloadPercent + "%" : "")
+                                        + (updateChecker.latestVersion.length > 0 ? " · " + updateChecker.latestVersion : "")
+                                    color: updateChecker.updateAvailable ? window.accent : window.muted
+                                    wrapMode: Text.Wrap; font.pixelSize: 10
+                                }
+                                Label {
+                                    Layout.fillWidth: true
+                                    text: window.tr("Current version") + " " + updateChecker.currentVersion
+                                    color: "#748091"; font.pixelSize: 10
+                                }
                             }
                         }
                         Surface {
@@ -1278,8 +1386,8 @@ ApplicationWindow {
                                 anchors.fill: parent; anchors.margins: 22; spacing: 24
                                 ColumnLayout {
                                     Layout.fillWidth: true; spacing: 7
-                                    SectionTitle { text: "IN-GAME CONTROL" }
-                                    Label { text: "Capture with global keys"; color: window.ink; font.pixelSize: 16; font.bold: true }
+                                    SectionTitle { text: window.tr("IN-GAME CONTROL") }
+                                    Label { text: window.tr("Capture with global keys"); color: window.ink; font.pixelSize: 16; font.bold: true }
                                     Label {
                                         Layout.fillWidth: true
                                         text: window.windowsDesktop
@@ -1292,7 +1400,7 @@ ApplicationWindow {
                                 }
                                 Button {
                                     implicitHeight: 40; leftPadding: 14; rightPadding: 14
-                                    text: window.windowsDesktop ? "Change shortcuts" : globalShortcuts.requesting ? "Restoring shortcuts…" : globalShortcuts.allRegistered ? "Replay " + globalShortcuts.triggerDescription + " · Screenshot " + globalShortcuts.screenshotTriggerDescription : globalShortcuts.registered || globalShortcuts.screenshotRegistered ? "Finish shortcut setup" : "Enable capture shortcuts"
+                                    text: window.tr(window.windowsDesktop ? "Change shortcuts" : globalShortcuts.requesting ? "Restoring shortcuts…" : globalShortcuts.allRegistered ? "Replay " + globalShortcuts.triggerDescription + " · Screenshot " + globalShortcuts.screenshotTriggerDescription : globalShortcuts.registered || globalShortcuts.screenshotRegistered ? "Finish shortcut setup" : "Enable capture shortcuts")
                                     enabled: globalShortcuts.portalAvailable && !globalShortcuts.requesting && (window.windowsDesktop || !globalShortcuts.allRegistered)
                                     onClicked: {
                                         if (window.windowsDesktop)
@@ -1305,7 +1413,7 @@ ApplicationWindow {
                                 }
                             }
                         }
-                        Label { text: "Your preferences are saved automatically on this device."; color: "#748091"; wrapMode: Text.Wrap; Layout.fillWidth: true; font.pixelSize: 10 }
+                        Label { text: window.tr("Your preferences are saved automatically on this device."); color: "#748091"; wrapMode: Text.Wrap; Layout.fillWidth: true; font.pixelSize: 10 }
                     }
                     }
                 }
@@ -1319,12 +1427,12 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             ColumnLayout {
                                 spacing: 4
-                                Label { text: "Clip editor"; color: window.ink; font.pixelSize: 25; font.weight: Font.DemiBold; font.letterSpacing: -0.6 }
-                                Label { text: "Trim a copy of your video. The original file stays untouched."; color: window.muted; font.pixelSize: 11 }
+                                Label { text: window.tr("Clip editor"); color: window.ink; font.pixelSize: 25; font.weight: Font.DemiBold; font.letterSpacing: -0.6 }
+                                Label { text: window.tr("Trim a copy of your video. The original file stays untouched."); color: window.muted; font.pixelSize: 11 }
                             }
                             Item { Layout.fillWidth: true }
                             Button {
-                                text: "Back to Library"; implicitHeight: 36; leftPadding: 12; rightPadding: 12
+                                text: window.tr("Back to Library"); implicitHeight: 36; leftPadding: 12; rightPadding: 12
                                 onClicked: window.page = 0
                                 contentItem: Label { text: parent.text; color: window.ink; font.pixelSize: 11; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                 background: Rectangle { radius: 8; color: window.actionButtonFill(parent, "#1b2934", "#1b2934"); border.color: parent.hovered ? "#627889" : window.line; Behavior on color { ColorAnimation { duration: 100 } } }
@@ -1338,7 +1446,7 @@ ApplicationWindow {
                                     anchors.fill: parent; anchors.margins: 16; spacing: 12
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        SectionTitle { text: "PREVIEW" }
+                                        SectionTitle { text: window.tr("PREVIEW") }
                                         Item { Layout.fillWidth: true }
                                         Label { text: player.playbackState === MediaPlayer.PlayingState ? "PLAYING" : "EDITING"; color: player.playbackState === MediaPlayer.PlayingState ? window.accent : window.muted; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1 }
                                     }
@@ -1348,12 +1456,12 @@ ApplicationWindow {
                                         Column {
                                             anchors.centerIn: parent; width: parent.width - 36; spacing: 10
                                             visible: videoEditor.sourcePath.length === 0
-                                            Label { width: parent.width; text: "Choose a video from Library"; color: window.ink; font.pixelSize: 15; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter }
-                                            Label { width: parent.width; text: "Select a clip, then use Edit clip to set the section you want to keep."; color: window.muted; font.pixelSize: 11; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter }
+                                            Label { width: parent.width; text: window.tr("Choose a video from Library"); color: window.ink; font.pixelSize: 15; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter }
+                                            Label { width: parent.width; text: window.tr("Select a clip, then use Edit clip to set the section you want to keep."); color: window.muted; font.pixelSize: 11; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter }
                                             Button {
                                                 objectName: "editorEmptyChooseButton"
                                                 anchors.horizontalCenter: parent.horizontalCenter
-                                                text: "Choose a video"
+                                                text: window.tr("Choose a video")
                                                 implicitHeight: 36; leftPadding: 15; rightPadding: 15
                                                 onClicked: editorVideoDialog.open()
                                                 contentItem: Label { text: parent.text; color: "#182111"; font.pixelSize: 11; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
@@ -1385,52 +1493,52 @@ ApplicationWindow {
                                 Layout.preferredWidth: window.width < 1100 ? 250 : 285; Layout.fillHeight: true
                                 ColumnLayout {
                                     anchors.fill: parent; anchors.margins: 18; spacing: 14
-                                    SectionTitle { text: "CURRENT CUT" }
+                                    SectionTitle { text: window.tr("CURRENT CUT") }
                                     RowLayout {
                                         Layout.fillWidth: true
                                         ColumnLayout {
                                             spacing: 3
-                                            Label { text: "IN"; color: window.muted; font.pixelSize: 9; font.bold: true }
+                                            Label { text: window.tr("IN"); color: window.muted; font.pixelSize: 9; font.bold: true }
                                             Label { text: window.formatTime(videoEditor.inMs); color: window.accent; font.pixelSize: 15; font.bold: true }
                                         }
                                         Item { Layout.fillWidth: true }
                                         ColumnLayout {
                                             spacing: 3
-                                            Label { text: "OUT"; color: window.muted; font.pixelSize: 9; font.bold: true }
+                                            Label { text: window.tr("OUT"); color: window.muted; font.pixelSize: 9; font.bold: true }
                                             Label { text: window.formatTime(videoEditor.outMs); color: window.accent; font.pixelSize: 15; font.bold: true }
                                         }
                                     }
-                                    SectionTitle { text: "EXPORT PROFILE" }
+                                    SectionTitle { text: window.tr("EXPORT PROFILE") }
                                     SettingCombo {
                                         objectName: "editorExportPreset"
                                         Layout.fillWidth: true
-                                        model: ["Compact · smallest file", "Balanced", "High quality", "Maximum · largest file"]
+                                        model: recordingPreferences.language === "pt_BR" ? ["Compacto · menor arquivo", "Equilibrado", "Alta qualidade", "Máximo · maior arquivo"] : ["Compact · smallest file", "Balanced", "High quality", "Maximum · largest file"]
                                         currentIndex: videoEditor.exportPreset
                                         onActivated: videoEditor.setExportPreset(currentIndex)
                                     }
                                     Label {
                                         Layout.fillWidth: true
-                                        text: videoEditor.exportPresetDescription
+                                        text: window.tr(videoEditor.exportPresetDescription)
                                         color: window.muted; font.pixelSize: 9; wrapMode: Text.Wrap
                                     }
                                     Rectangle { Layout.fillWidth: true; height: 1; color: window.line }
-                                    Label { text: "Kept section"; color: window.muted; font.pixelSize: 10 }
+                                    Label { text: window.tr("Kept section"); color: window.muted; font.pixelSize: 10 }
                                     Label { text: window.formatTime(Math.max(0, videoEditor.outMs - videoEditor.inMs)); color: window.ink; font.pixelSize: 24; font.bold: true }
-                                    Label { Layout.fillWidth: true; text: "Drag either handle on the timeline. Save changes replaces the Library entry; the original stays on disk."; color: window.muted; font.pixelSize: 10; wrapMode: Text.Wrap }
-                                    Label { Layout.fillWidth: true; text: videoEditor.statusMessage; color: window.muted; font.pixelSize: 10; wrapMode: Text.Wrap; maximumLineCount: 3; elide: Text.ElideRight }
+                                    Label { Layout.fillWidth: true; text: window.tr("Drag either handle on the timeline. Save changes replaces the Library entry; the original stays on disk."); color: window.muted; font.pixelSize: 10; wrapMode: Text.Wrap }
+                                    Label { Layout.fillWidth: true; text: window.tr(videoEditor.statusMessage); color: window.muted; font.pixelSize: 10; wrapMode: Text.Wrap; maximumLineCount: 3; elide: Text.ElideRight }
                                     MomentProgress { Layout.fillWidth: true; visible: videoEditor.exporting; from: 0; to: 100; value: videoEditor.exportProgress }
                                     Item { Layout.fillHeight: true }
                                     Button {
                                         Layout.fillWidth: true; implicitHeight: 46
                                         enabled: videoEditor.sourcePath.length > 0 && videoEditor.durationMs > 0 && videoEditor.outMs > videoEditor.inMs && !videoEditor.exporting
-                                        text: videoEditor.exporting ? "Saving " + videoEditor.exportProgress + "%…" : "Save changes"
+                                        text: videoEditor.exporting ? window.tr("Saving…") + " " + videoEditor.exportProgress + "%…" : window.tr("Save changes")
                                         onClicked: videoEditor.exportClip()
                                         contentItem: Label { text: parent.text; color: parent.enabled ? "#182111" : window.muted; font.pixelSize: 12; font.weight: Font.Bold; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                         background: Rectangle { radius: 8; color: window.actionButtonFill(parent, window.accent, "#26313e"); Behavior on color { ColorAnimation { duration: 100 } } }
                                     }
                                     Button {
                                         Layout.fillWidth: true; visible: videoEditor.exporting; implicitHeight: 34
-                                        text: "Cancel save"; onClicked: videoEditor.cancelExport()
+                                        text: window.tr("Cancel save"); onClicked: videoEditor.cancelExport()
                                         contentItem: Label { text: parent.text; color: "#e7aa9b"; font.pixelSize: 10; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                         background: Rectangle { radius: 8; color: window.actionButtonFill(parent, "#2e2425", "#2e2425"); Behavior on color { ColorAnimation { duration: 100 } } }
                                     }
@@ -1444,9 +1552,9 @@ ApplicationWindow {
                                 anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; anchors.topMargin: 9; anchors.bottomMargin: 7; spacing: 0
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    SectionTitle { text: "TIMELINE" }
+                                    SectionTitle { text: window.tr("TIMELINE") }
                                     Item { Layout.fillWidth: true }
-                                    Label { text: "One video track"; color: window.muted; font.pixelSize: 9 }
+                                    Label { text: window.tr("One video track"); color: window.muted; font.pixelSize: 9 }
                                 }
                                 EditorTrimTimeline {
                                     Layout.fillWidth: true
@@ -1463,11 +1571,23 @@ ApplicationWindow {
                         }
                     }
                 }
+                // Friends and direct messages
+                FriendsPage {
+                    client: friendsClient
+                    ink: window.ink
+                    muted: window.muted
+                    panel: window.panel
+                    line: window.line
+                    accent: window.accent
+                    translate: window.tr
+                }
             }
 
             Label {
                 Layout.fillWidth: true
-                text: window.page === 3 ? videoEditor.statusMessage : screenRecorder.statusMessage.length ? screenRecorder.statusMessage : clipLibrary.statusMessage
+                text: window.tr(window.page === 3 ? videoEditor.statusMessage
+                    : window.page === 4 ? friendsClient.statusMessage
+                    : screenRecorder.statusMessage.length ? screenRecorder.statusMessage : clipLibrary.statusMessage)
                 color: window.muted; font.pixelSize: 10; elide: Text.ElideRight
             }
         }

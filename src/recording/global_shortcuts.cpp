@@ -48,6 +48,7 @@ Q_DECLARE_METATYPE(QList<ShortcutBinding>)
 
 GlobalShortcuts::GlobalShortcuts(QObject *parent) : QObject(parent)
 {
+    m_activationClock.start();
     qDBusRegisterMetaType<ShortcutBinding>();
     qDBusRegisterMetaType<QList<ShortcutBinding>>();
 
@@ -55,8 +56,16 @@ GlobalShortcuts::GlobalShortcuts(QObject *parent) : QObject(parent)
     const auto *busInterface = bus.interface();
     m_portalAvailable = busInterface
         && busInterface->isServiceRegistered(kPortalService).value();
-    bus.connect(kPortalService, kPortalPath, kShortcutsInterface, QStringLiteral("Activated"),
-                this, SLOT(handleActivated(QDBusObjectPath,QString,qulonglong,QVariantMap)));
+    // Use the portal's public owner and its exact wire signature. Qt otherwise
+    // accepts a connection whose inferred slot signature does not match the
+    // portal signal, then silently drops every activation at delivery time.
+    const bool activationConnected = bus.connect(
+        kPortalService, kPortalPath, kShortcutsInterface, QStringLiteral("Activated"),
+        QStringLiteral("osta{sv}"), this,
+        SLOT(handleActivated(QDBusObjectPath,QString,qulonglong,QVariantMap)));
+    if (!activationConnected)
+        qWarning().noquote() << "Moment: cannot subscribe to portal Activated signal:"
+                             << bus.lastError().message();
     bus.connect(kPortalService, kPortalPath, kShortcutsInterface, QStringLiteral("ShortcutsChanged"),
                 this, SLOT(handleShortcutsChanged(QDBusMessage)));
     bus.connect(kPortalService, QString(), QStringLiteral("org.freedesktop.portal.Session"),
@@ -300,6 +309,9 @@ void GlobalShortcuts::applyShortcuts(const QVariantMap &results, const QString &
     if (m_screenshotRegistered)
         active.append(QStringLiteral("screenshot %1").arg(m_screenshotTriggerDescription));
     setStatus(QStringLiteral("%1 · %2").arg(statusPrefix, active.join(QStringLiteral(" · "))));
+    qInfo().noquote() << "Moment: portal shortcuts bound; session=" << m_sessionPath
+                      << "replay=" << m_registered << m_triggerDescription
+                      << "screenshot=" << m_screenshotRegistered << m_screenshotTriggerDescription;
 }
 
 void GlobalShortcuts::resetSession(bool closeRemote)
@@ -355,9 +367,11 @@ void GlobalShortcuts::handleActivated(const QDBusObjectPath &session, const QStr
                              << m_sessionPath;
         return;
     }
-    if (shortcutId == QStringLiteral("save-replay") && m_registered)
+    if (shortcutId == QStringLiteral("save-replay") && m_registered
+        && acceptActivation(shortcutId))
         emit saveReplayRequested();
-    else if (shortcutId == QStringLiteral("save-screenshot") && m_screenshotRegistered)
+    else if (shortcutId == QStringLiteral("save-screenshot") && m_screenshotRegistered
+             && acceptActivation(shortcutId))
         emit saveScreenshotRequested();
     else
         qWarning().noquote() << "Moment: shortcut ID is not currently registered:" << shortcutId;

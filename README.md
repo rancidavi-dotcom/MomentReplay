@@ -18,6 +18,12 @@ flatpak install --user --bundle ~/Downloads/Moment-x86_64.flatpak
 
 O Flatpak usa os portais do desktop para solicitar acesso à tela e aos atalhos globais. Para captura no Wayland, mantenha o portal compatível com seu ambiente gráfico ativo.
 
+## Atualizações
+
+O Moment verifica releases estáveis do GitHub uma vez por dia. Para a instalação nativa em `~/.local/bin/medal-linux`, ele pode baixar o executável Linux e instalá-lo após validar o SHA-256 publicado na release; é preciso reiniciar o app para carregar a versão nova. No Windows, o atualizador baixa `Moment-Setup-x64.exe`, valida o SHA-256 e executa a instalação depois que o Moment fecha.
+
+Instalações Flatpak e pacotes do Arch continuam sendo atualizados pela origem de pacotes correspondente. Uma release precisa anexar os ativos `Moment-Linux-x86_64` e `Moment-Setup-x64.exe`; sem esses arquivos, o Moment apenas informa que há uma versão disponível e abre a página de releases.
+
 ## O que já funciona
 
 - Replay com duração configurável e gravação de sessões.
@@ -50,8 +56,12 @@ atalhos globais configuráveis, biblioteca, editor, bandeja e detecção de proc
 no Windows. O Linux continua usando PipeWire e os portais do desktop.
 
 As builds de teste ficam nos artefatos do workflow **Windows**, no GitHub Actions.
-Extraia toda a pasta **Moment-Windows-x64** e abra `Moment.exe`; as DLLs e pastas de
-plugins precisam ficar junto do executável. Ainda não é uma versão estável para
+Baixe e execute **Moment-Setup-x64.exe**. O instalador configura o Moment e suas
+dependências para o seu usuário. Ele cria também o desinstalador `unins000.exe`
+e o atalho **Uninstall Moment** no menu Iniciar. A release também inclui
+`Moment-Uninstall-x64.exe`, um desinstalador separado que preserva clipes e configurações.
+No Linux, `packaging/uninstall-linux.sh` remove a instalação local e o Flatpak do usuário,
+mantendo os dados pessoais. Ainda não é uma versão estável para
 jogos: captura de tela, desempenho, fullscreen e áudio precisam de validação em PCs
 Windows reais. O áudio usa o dispositivo de entrada escolhido; loopback automático
 do som do jogo ainda não está implementado.

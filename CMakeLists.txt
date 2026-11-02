@@ -4,6 +4,7 @@ project(medal_linux VERSION 0.1.0 LANGUAGES CXX)
 set(MOMENT_DISCORD_APPLICATION_ID "1565077771309555864" CACHE STRING "Public Discord application ID for Rich Presence")
 set(MOMENT_GOOGLE_OAUTH_CLIENT_ID "" CACHE STRING "Google OAuth desktop client ID for Drive sharing")
 set(MOMENT_GOOGLE_OAUTH_CLIENT_SECRET "" CACHE STRING "Google OAuth desktop client secret for this local build")
+set(MOMENT_FRIENDS_API_URL "" CACHE STRING "Moment Friends service URL (leave empty until the service is deployed)")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,7 +13,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 include(CTest)
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 Multimedia Concurrent Network)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Qml Quick QuickControls2 Multimedia Concurrent Network WebSockets)
 if(BUILD_TESTING)
     find_package(Qt6 REQUIRED COMPONENTS Test)
 endif()
@@ -45,6 +46,10 @@ qt_add_executable(medal-linux
     src/editor/video_editor.h
     src/share/google_drive_share.cpp
     src/share/google_drive_share.h
+    src/update/update_checker.cpp
+    src/update/update_checker.h
+    src/friends/friends_client.cpp
+    src/friends/friends_client.h
     src/desktop/tray_controller.cpp
     src/desktop/tray_controller.h
     src/desktop/capture_popup.cpp
@@ -70,7 +75,7 @@ qt_add_executable(medal-linux
 qt_add_qml_module(medal-linux
     URI MedalLinux
     VERSION 1.0
-    QML_FILES qml/Main.qml qml/CapturePopup.qml
+    QML_FILES qml/Main.qml qml/CapturePopup.qml qml/FriendsPage.qml qml/Localization.js
 )
 
 set_source_files_properties(packaging/io.moment.Moment.svg PROPERTIES QT_RESOURCE_ALIAS io.moment.Moment.svg)
@@ -91,6 +96,7 @@ target_link_libraries(medal-linux PRIVATE
     Qt6::Multimedia
     Qt6::Concurrent
     Qt6::Network
+    Qt6::WebSockets
     Qt6Keychain::Qt6Keychain
     moment-platform
     SQLite3::SQLite3
@@ -99,6 +105,13 @@ target_link_libraries(medal-linux PRIVATE
 if(NOT MOMENT_DISCORD_APPLICATION_ID STREQUAL "")
     target_compile_definitions(medal-linux PRIVATE
         "MOMENT_DISCORD_APPLICATION_ID=\"${MOMENT_DISCORD_APPLICATION_ID}\"")
+endif()
+
+target_compile_definitions(medal-linux PRIVATE "MOMENT_VERSION=\"${PROJECT_VERSION}\"")
+
+if(NOT MOMENT_FRIENDS_API_URL STREQUAL "")
+    target_compile_definitions(medal-linux PRIVATE
+        "MOMENT_FRIENDS_API_URL=\"${MOMENT_FRIENDS_API_URL}\"")
 endif()
 
 if(NOT MOMENT_GOOGLE_OAUTH_CLIENT_ID STREQUAL "")
@@ -310,4 +323,13 @@ if(BUILD_TESTING)
     )
     add_test(NAME instant-replay-test COMMAND instant-replay-test)
     set_tests_properties(instant-replay-test PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        qt_add_executable(update-checker-test
+            tests/update_checker_test.cpp
+            src/update/update_checker.cpp src/update/update_checker.h)
+        target_include_directories(update-checker-test PRIVATE src)
+        target_link_libraries(update-checker-test PRIVATE Qt6::Core Qt6::Gui Qt6::Network Qt6::Test)
+        add_test(NAME update-checker-test COMMAND update-checker-test)
+    endif()
 endif()

@@ -134,8 +134,16 @@ void ScreenRecorder::initialize()
         }
     });
     connect(&m_replayBuffer, &InstantReplay::bufferedSecondsChanged,
-            this, &ScreenRecorder::bufferedSecondsChanged);
-    connect(&m_replayBuffer, &InstantReplay::exportingChanged, this, &ScreenRecorder::stateChanged);
+            this, [this] {
+        emit bufferedSecondsChanged();
+        if (!m_pendingReplayClipDurations.isEmpty())
+            QTimer::singleShot(0, this, &ScreenRecorder::processNextQueuedReplayClip);
+    });
+    connect(&m_replayBuffer, &InstantReplay::exportingChanged, this, [this] {
+        emit stateChanged();
+        if (!m_replayBuffer.exporting() && !m_pendingReplayClipDurations.isEmpty())
+            QTimer::singleShot(0, this, &ScreenRecorder::processNextQueuedReplayClip);
+    });
     connect(&m_replayBuffer, &InstantReplay::statusMessageChanged, this, [this] {
         if (!m_replayBuffer.statusMessage().isEmpty())
             setStatusMessage(m_replayBuffer.statusMessage());
@@ -482,6 +490,13 @@ void ScreenRecorder::stopCapture()
         return;
     if (m_state == State::Stopping)
         return;
+    const bool hadPendingCaptureRequests = !m_pendingReplayClipDurations.isEmpty()
+        || m_pendingScreenshotRequests > 0;
+    if (!m_pendingReplayClipDurations.isEmpty())
+        m_pendingReplayClipDurations.clear();
+    m_pendingScreenshotRequests = 0;
+    if (hadPendingCaptureRequests)
+        emit operationFailed(QStringLiteral("Capture stopped before queued save requests could finish."));
     if (m_state == State::Recording) {
         m_stopCaptureRequested = true;
         stopRecording();
@@ -595,10 +610,23 @@ void ScreenRecorder::stopRecording()
 
 void ScreenRecorder::saveReplayClip(int durationSeconds)
 {
-    if (m_preferences.effectiveCaptureAudio() && !m_replayBuffer.audioBuffered()) {
-        const QString message = QStringLiteral("Audio is enabled, but no audio samples reached the replay buffer yet.");
-        setStatusMessage(message);
-        emit operationFailed(message);
+    if (m_replayBuffer.exporting() || !m_replayBuffer.hasReplayFrames()) {
+        if (!busy()) {
+            const QString message = QStringLiteral("Start capture and wait for the first screen frames before saving a replay.");
+            setStatusMessage(message);
+            emit operationFailed(message);
+            return;
+        }
+        constexpr int maxQueuedClips = 5;
+        if (m_pendingReplayClipDurations.size() >= maxQueuedClips) {
+            const QString message = QStringLiteral("Replay export queue is full. Wait for the saved clips to finish.");
+            setStatusMessage(message);
+            emit operationFailed(message);
+            return;
+        }
+        m_pendingReplayClipDurations.enqueue(qBound(1, durationSeconds, 120));
+        setStatusMessage(QStringLiteral("Replay save queued · %1 waiting for capture/export")
+                             .arg(m_pendingReplayClipDurations.size()));
         return;
     }
     const QString outputPath = makeReplayPath();
@@ -608,9 +636,23 @@ void ScreenRecorder::saveReplayClip(int durationSeconds)
     emit stateChanged();
 }
 
+void ScreenRecorder::processNextQueuedReplayClip()
+{
+    if (m_replayBuffer.exporting() || m_pendingReplayClipDurations.isEmpty()
+        || !m_replayBuffer.hasReplayFrames())
+        return;
+    const int durationSeconds = m_pendingReplayClipDurations.dequeue();
+    saveReplayClip(durationSeconds);
+}
+
 void ScreenRecorder::saveScreenshot()
 {
     if (m_latestFrame.isNull()) {
+        if (busy() && m_pendingScreenshotRequests < 5) {
+            ++m_pendingScreenshotRequests;
+            setStatusMessage(QStringLiteral("Screenshot queued until the first screen frame arrives"));
+            return;
+        }
         const QString message = QStringLiteral("A screenshot is available after screen capture delivers a frame.");
         setStatusMessage(message);
         emit operationFailed(message);
@@ -633,6 +675,14 @@ void ScreenRecorder::saveScreenshot()
     m_library.importFile(path);
     setStatusMessage(QStringLiteral("Screenshot saved and added to your library"));
     emit screenshotSaved(path);
+}
+
+void ScreenRecorder::processQueuedScreenshots()
+{
+    while (m_pendingScreenshotRequests > 0 && !m_latestFrame.isNull()) {
+        --m_pendingScreenshotRequests;
+        saveScreenshot();
+    }
 }
 
 QString ScreenRecorder::makeOutputPath() const
@@ -664,6 +714,7 @@ void ScreenRecorder::updateLatestFrame(const QImage &image)
     m_latestFrame = image.copy();
     if (!wasAvailable)
         emit stateChanged();
+    processQueuedScreenshots();
 }
 
 void ScreenRecorder::finalizeRecording()
@@ -703,6 +754,8 @@ void ScreenRecorder::finalizeRecording()
 
 void ScreenRecorder::fail(const QString &message)
 {
+    m_pendingReplayClipDurations.clear();
+    m_pendingScreenshotRequests = 0;
     if (!m_videoFrameInput)
         m_screenCapture->stop();
     m_captureActive = false;

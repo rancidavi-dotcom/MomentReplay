@@ -28,6 +28,7 @@ using DesktopScreenCast = WaylandScreenCast;
 #include <QMediaDevices>
 #include <QTimer>
 #include <QStringList>
+#include <QQueue>
 
 #include <memory>
 
@@ -110,6 +111,8 @@ private:
     void pumpSessionAudio();
     void stopRecorderWhenAudioDrained();
     void setAudioCaptureStatus(const QString &message);
+    void processNextQueuedReplayClip();
+    void processQueuedScreenshots();
 
     ClipLibraryModel &m_library;
     RecordingPreferences &m_preferences;
@@ -117,6 +120,8 @@ private:
     QString m_screenshotDirectory;
     QString m_statusMessage;
     QImage m_latestFrame;
+    QQueue<int> m_pendingReplayClipDurations;
+    int m_pendingScreenshotRequests = 0;
     QMediaCaptureSession m_captureSession;
     QVideoSink m_videoSink;
     QMediaRecorder m_mediaRecorder;

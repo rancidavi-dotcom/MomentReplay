@@ -9,10 +9,13 @@
 #include "desktop/discord_presence.h"
 #include "editor/video_editor.h"
 #include "share/google_drive_share.h"
+#include "update/update_checker.h"
+#include "friends/friends_client.h"
 
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QIcon>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
@@ -23,15 +26,35 @@
 #include <QDebug>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QThread>
+#include <QThreadPool>
 #include <QTemporaryDir>
 #include <QSettings>
 #include <QUrl>
 #include <QWindow>
+#include <QQuickWindow>
+
+#ifndef MOMENT_FRIENDS_API_URL
+#define MOMENT_FRIENDS_API_URL ""
+#endif
 
 #include <cstdio>
+#ifdef Q_OS_LINUX
+#include <sys/resource.h>
+#endif
 
 int main(int argc, char *argv[])
 {
+#ifdef Q_OS_LINUX
+    // The replay encoder runs while a game is in the foreground. If Moment is
+    // launched from a shell with elevated scheduling priority, FFmpeg's worker
+    // threads inherit it and can preempt the game during clip export. Lower the
+    // main thread before Qt creates capture/encoder workers so the game wins CPU
+    // time under load. Raising the nice value is unprivileged and reversible.
+    if (::setpriority(PRIO_PROCESS, 0, 10) != 0)
+        std::fprintf(stderr, "Moment: could not lower background CPU priority.\n");
+    QThreadPool::globalInstance()->setThreadPriority(QThread::LowPriority);
+#endif
     QApplication app(argc, argv);
     app.setQuitOnLastWindowClosed(false);
 #ifdef Q_OS_WIN
@@ -45,6 +68,7 @@ int main(int argc, char *argv[])
     QGuiApplication::setDesktopFileName(flatpakAppId.isEmpty()
         ? QStringLiteral("io.moment.Moment") : flatpakAppId);
     QGuiApplication::setApplicationDisplayName(QStringLiteral("Moment"));
+    QCoreApplication::setApplicationVersion(QStringLiteral(MOMENT_VERSION));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/io.moment.Moment.svg")));
 
     QCommandLineParser parser;
@@ -57,10 +81,18 @@ int main(int argc, char *argv[])
     const QCommandLineOption smokeTestOption(QStringLiteral("smoke-test"),
         QStringLiteral("Check UI startup with temporary data and no screen capture, then exit."));
     parser.addOption(smokeTestOption);
+    const QCommandLineOption previewFriendsOption(QStringLiteral("preview-friends"),
+        QStringLiteral("Render the Friends page in an isolated temporary window and save a PNG."),
+        QStringLiteral("png"));
+    parser.addOption(previewFriendsOption);
+    const QCommandLineOption startHiddenOption(QStringLiteral("start-hidden"),
+        QStringLiteral("Start capture and shortcuts without showing the main window."));
+    parser.addOption(startHiddenOption);
     parser.process(app);
 
     QTemporaryDir smokeDirectory;
-    const bool smokeTest = parser.isSet(smokeTestOption);
+    const bool friendsPreview = parser.isSet(previewFriendsOption);
+    const bool smokeTest = parser.isSet(smokeTestOption) || friendsPreview;
     if (smokeTest && !smokeDirectory.isValid())
         return 2;
     const QString dataDirectory = smokeTest ? smokeDirectory.path() : parser.isSet(dataDirectoryOption)
@@ -91,6 +123,8 @@ int main(int argc, char *argv[])
     VideoEditor videoEditor(library, dataDirectory + QStringLiteral("/EditorProjects"), videoDirectory);
     GoogleDriveShare driveShare;
     RecordingPreferences preferences(dataDirectory + QStringLiteral("/settings.ini"));
+    UpdateChecker updateChecker(dataDirectory + QStringLiteral("/settings.ini"),
+                               QCoreApplication::applicationVersion(), !smokeTest);
     GameMonitor gameMonitor(dataDirectory + QStringLiteral("/settings.ini"));
     DiscordPresence discordPresence(gameMonitor, dataDirectory + QStringLiteral("/settings.ini"));
     ScreenRecorder recorder(library, preferences, videoDirectory, screenshotDirectory);
@@ -102,6 +136,18 @@ int main(int argc, char *argv[])
     TrayController trayController;
     QQmlApplicationEngine engine;
     CapturePopup capturePopup(&engine);
+    CapturePopup socialPopup(&engine, nullptr, QStringLiteral("social"), 112);
+    FriendsClient friendsClient(dataDirectory + QStringLiteral("/settings.ini"),
+                                QString::fromUtf8(MOMENT_FRIENDS_API_URL));
+    QObject::connect(&friendsClient, &FriendsClient::incomingNotification, &app,
+                     [&socialPopup](const QString &title, const QString &message, bool warning) {
+        socialPopup.show(title, message, warning);
+    });
+    QObject::connect(&friendsClient, &FriendsClient::clipDownloaded, &app,
+                     [&library, &socialPopup](const QString &path) {
+        library.importFile(path);
+        socialPopup.show(QStringLiteral("Video received"), QFileInfo(path).fileName());
+    });
     bool recordingStartedByGame = false;
     bool activeProfileRequestsRecording = false;
     QString recordingGameProcess;
@@ -128,18 +174,22 @@ int main(int argc, char *argv[])
                      [applyActiveGameProfile](const QVariantMap &) { applyActiveGameProfile(); });
     QObject::connect(&recorder, &ScreenRecorder::stateChanged, &app, applyActiveGameProfile);
     QObject::connect(&globalShortcuts, &GlobalShortcuts::saveReplayRequested,
-                     &recorder, [&recorder, &globalShortcuts, &preferences, &capturePopup] {
+                     &recorder, [&recorder, &preferences, &capturePopup] {
         qInfo() << "Moment: replay shortcut dispatched to recorder";
-        if (!recorder.buffering() || recorder.bufferedSeconds() == 0) {
-            globalShortcuts.reportReplayUnavailable();
-            capturePopup.show(QStringLiteral("Replay is not ready"),
-                              QStringLiteral("Let capture run for a few seconds and try again."), true);
-            return;
-        }
+        capturePopup.show(QStringLiteral("Saving replay…"),
+                          QStringLiteral("Preparing your recent gameplay clip."), false, {}, true);
         recorder.saveReplayClip(preferences.effectiveReplayClipSeconds());
+        if (recorder.statusMessage().startsWith(QStringLiteral("Replay save queued")))
+            capturePopup.show(QStringLiteral("Replay queued"), recorder.statusMessage(), false, {}, true);
     });
     QObject::connect(&globalShortcuts, &GlobalShortcuts::saveScreenshotRequested,
-                     &recorder, &ScreenRecorder::saveScreenshot);
+                     &recorder, [&recorder, &capturePopup] {
+        capturePopup.show(QStringLiteral("Saving screenshot…"),
+                          QStringLiteral("Saving the current screen frame."), false, {}, true);
+        recorder.saveScreenshot();
+        if (recorder.statusMessage().startsWith(QStringLiteral("Screenshot queued")))
+            capturePopup.show(QStringLiteral("Screenshot queued"), recorder.statusMessage(), false, {}, true);
+    });
     QObject::connect(&recorder, &ScreenRecorder::replayClipSaved, &capturePopup,
                      [&capturePopup](const QString &path) {
         capturePopup.show(QStringLiteral("Replay saved"), QFileInfo(path).fileName());
@@ -198,12 +248,14 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("clipLibrary"), &library);
     engine.rootContext()->setContextProperty(QStringLiteral("screenRecorder"), &recorder);
     engine.rootContext()->setContextProperty(QStringLiteral("recordingPreferences"), &preferences);
+    engine.rootContext()->setContextProperty(QStringLiteral("updateChecker"), &updateChecker);
     engine.rootContext()->setContextProperty(QStringLiteral("gameMonitor"), &gameMonitor);
     engine.rootContext()->setContextProperty(QStringLiteral("discordPresence"), &discordPresence);
     engine.rootContext()->setContextProperty(QStringLiteral("videoEditor"), &videoEditor);
     engine.rootContext()->setContextProperty(QStringLiteral("driveShare"), &driveShare);
     engine.rootContext()->setContextProperty(QStringLiteral("globalShortcuts"), &globalShortcuts);
     engine.rootContext()->setContextProperty(QStringLiteral("trayController"), &trayController);
+    engine.rootContext()->setContextProperty(QStringLiteral("friendsClient"), &friendsClient);
     const QUrl mainQml(QStringLiteral("qrc:/qt/qml/MedalLinux/qml/Main.qml"));
     if (!QFile::exists(mainQml.toString().mid(3)))
         return 4;
@@ -215,7 +267,10 @@ int main(int argc, char *argv[])
             std::fprintf(stderr, "QML component entered error state without diagnostics.\n");
         return 3;
     }
-    QObject *root = component.createWithInitialProperties({{QStringLiteral("autoCaptureEnabled"), !smokeTest}});
+    QObject *root = component.createWithInitialProperties({
+        {QStringLiteral("autoCaptureEnabled"), !smokeTest},
+        {QStringLiteral("startHidden"), parser.isSet(startHiddenOption)},
+        {QStringLiteral("page"), friendsPreview ? 4 : 0}});
     if (!root) {
         for (const auto &error : component.errors())
             std::fprintf(stderr, "%s\n", qPrintable(error.toString()));
@@ -226,7 +281,20 @@ int main(int argc, char *argv[])
     root->setParent(&engine);
     auto *mainWindow = qobject_cast<QWindow *>(root);
     trayController.setMainWindow(mainWindow);
-    if (smokeTest)
+    if (friendsPreview) {
+        const QString previewPath = QFileInfo(parser.value(previewFriendsOption)).absoluteFilePath();
+        QTimer::singleShot(700, &app, [mainWindow, previewPath, &app] {
+            auto *quickWindow = qobject_cast<QQuickWindow *>(mainWindow);
+            const QImage image = quickWindow ? quickWindow->grabWindow() : QImage();
+            if (image.isNull() || !image.save(previewPath)) {
+                qCritical("Could not save isolated Friends page preview to %s", qPrintable(previewPath));
+                app.exit(6);
+                return;
+            }
+            qInfo("Saved isolated Friends page preview to %s", qPrintable(previewPath));
+            app.quit();
+        });
+    } else if (smokeTest)
         QTimer::singleShot(1000, &app, &QCoreApplication::quit);
     else
         trayController.showTrayIcon();

@@ -17,3 +17,6 @@ google_oauth_client.json
 CMakeUserPresets.json
 .env
 .env.*
+backend/cloudflare/wrangler.jsonc
+backend/cloudflare/.dev.vars
+backend/cloudflare/node_modules/

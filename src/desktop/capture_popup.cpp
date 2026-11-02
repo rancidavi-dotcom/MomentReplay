@@ -11,10 +11,12 @@
 #include <LayerShellQt/Window>
 #endif
 
-CapturePopup::CapturePopup(QQmlEngine *engine, QObject *parent)
-    : QObject(parent), m_window(std::make_unique<QQuickView>(engine, nullptr))
+CapturePopup::CapturePopup(QQmlEngine *engine, QObject *parent, const QString &scope,
+                           int verticalOffset)
+    : QObject(parent), m_window(std::make_unique<QQuickView>(engine, nullptr)),
+      m_verticalOffset(qMax(0, verticalOffset))
 {
-    m_window->setTitle(QStringLiteral("Moment capture popup"));
+    m_window->setTitle(QStringLiteral("Moment %1 popup").arg(scope));
     m_window->setFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint
                        | Qt::WindowDoesNotAcceptFocus | Qt::WindowTransparentForInput);
     m_window->setColor(Qt::transparent);
@@ -22,11 +24,11 @@ CapturePopup::CapturePopup(QQmlEngine *engine, QObject *parent)
 #ifdef MOMENT_HAS_LAYER_SHELL
     if (QGuiApplication::platformName().startsWith(QStringLiteral("wayland"))) {
         auto *layer = LayerShellQt::Window::get(m_window.get());
-        layer->setScope(QStringLiteral("moment-capture-popup"));
+        layer->setScope(QStringLiteral("moment-%1-popup").arg(scope));
         layer->setAnchors(LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight)
                           | LayerShellQt::Window::AnchorBottom);
         layer->setLayer(LayerShellQt::Window::LayerOverlay);
-        layer->setMargins(QMargins(24, 24, 24, 24));
+        layer->setMargins(QMargins(24, 24, 24, 24 + m_verticalOffset));
         layer->setExclusiveZone(0);
         layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
         layer->setActivateOnShow(false);
@@ -42,7 +44,7 @@ CapturePopup::CapturePopup(QQmlEngine *engine, QObject *parent)
 CapturePopup::~CapturePopup() = default;
 
 void CapturePopup::show(const QString &title, const QString &message, bool warning,
-                        const QUrl &preview)
+                        const QUrl &preview, bool persistent)
 {
     auto *item = m_window->rootObject();
     if (!item) {
@@ -61,12 +63,15 @@ void CapturePopup::show(const QString &title, const QString &message, bool warni
             m_window->setScreen(screen);
             const QRect area = screen->availableGeometry();
             m_window->setPosition(area.right() - m_window->width() - 23,
-                                  area.bottom() - m_window->height() - 23);
+                                  area.bottom() - m_window->height() - 23 - m_verticalOffset);
         }
     }
     m_window->show();
     item->setProperty("sequence", ++m_sequence);
-    m_hideTimer.start();
+    if (persistent)
+        m_hideTimer.stop();
+    else
+        m_hideTimer.start();
 }
 
 QQuickView *CapturePopup::window() const { return m_window.get(); }

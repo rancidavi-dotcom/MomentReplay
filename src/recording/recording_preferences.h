@@ -17,6 +17,7 @@ class RecordingPreferences final : public QObject {
     Q_PROPERTY(int effectiveQuality READ effectiveQuality NOTIFY effectiveSettingsChanged)
     Q_PROPERTY(int effectiveReplaySeconds READ effectiveReplaySeconds NOTIFY effectiveSettingsChanged)
     Q_PROPERTY(int effectiveReplayClipSeconds READ effectiveReplayClipSeconds NOTIFY effectiveSettingsChanged)
+    Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY languageChanged)
 
 public:
     explicit RecordingPreferences(const QString &settingsFile, QObject *parent = nullptr);
@@ -33,6 +34,7 @@ public:
     int effectiveReplayClipSeconds() const;
     bool effectiveCaptureAudio() const;
     QString settingsFilePath() const;
+    QString language() const;
 
     Q_INVOKABLE void setFrameRate(int value);
     Q_INVOKABLE void setQuality(int value);
@@ -40,6 +42,7 @@ public:
     Q_INVOKABLE void setReplayClipSeconds(int value);
     Q_INVOKABLE void setCaptureAudio(bool value);
     Q_INVOKABLE void setAudioInputId(const QByteArray &value);
+    Q_INVOKABLE void setLanguage(const QString &value);
     void setActiveGameProfile(const QVariantMap &profile);
 
 signals:
@@ -50,6 +53,7 @@ signals:
     void captureAudioChanged();
     void audioInputIdChanged();
     void effectiveSettingsChanged();
+    void languageChanged();
 
 private:
     QSettings m_settings;
@@ -59,5 +63,6 @@ private:
     int m_replayClipSeconds = 15;
     bool m_captureAudio = false;
     QByteArray m_audioInputId;
+    QString m_language = QStringLiteral("en");
     QVariantMap m_activeGameProfile;
 };

@@ -6,10 +6,14 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
-#include <QUuid>
 #include <windows.h>
 
 namespace {
+// RegisterHotKey reserves 0xC000–0xFFFF for shared DLLs that use global atoms.
+// Moment is an application, so keep its two thread-hotkey IDs in 0x0000–0xBFFF.
+constexpr int kReplayHotkeyId = 0x4D01;
+constexpr int kScreenshotHotkeyId = 0x4D02;
+
 struct Hotkey {
     UINT modifiers = MOD_NOREPEAT;
     UINT key = 0;
@@ -51,10 +55,10 @@ GlobalShortcuts::GlobalShortcuts(QObject *parent)
 GlobalShortcuts::GlobalShortcuts(const QString &settingsFile, QObject *parent)
     : QObject(parent), m_settingsFile(settingsFile)
 {
-    const QString token = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    m_replayId = GlobalAddAtomW(qUtf16Printable(QStringLiteral("Moment.Replay.") + token));
-    m_screenshotId = GlobalAddAtomW(qUtf16Printable(QStringLiteral("Moment.Screenshot.") + token));
-    m_portalAvailable = m_replayId && m_screenshotId;
+    m_activationClock.start();
+    m_replayId = kReplayHotkeyId;
+    m_screenshotId = kScreenshotHotkeyId;
+    m_portalAvailable = true;
     QCoreApplication::instance()->installNativeEventFilter(this);
     QSettings settings(m_settingsFile, QSettings::IniFormat);
     const QString replay = settings.value(QStringLiteral("shortcuts/windowsReplay"), "F8").toString();
@@ -68,8 +72,6 @@ GlobalShortcuts::~GlobalShortcuts()
 {
     QCoreApplication::instance()->removeNativeEventFilter(this);
     releaseHotkeys();
-    if (m_replayId) GlobalDeleteAtom(ATOM(m_replayId));
-    if (m_screenshotId) GlobalDeleteAtom(ATOM(m_screenshotId));
 }
 
 bool GlobalShortcuts::portalAvailable() const { return m_portalAvailable; }
@@ -158,9 +160,11 @@ bool GlobalShortcuts::nativeEventFilter(const QByteArray &eventType, void *messa
     const auto *native = static_cast<const MSG *>(message);
     if (native->message != WM_HOTKEY)
         return false;
-    if (m_registered && native->wParam == WPARAM(m_replayId))
+    if (m_registered && native->wParam == WPARAM(m_replayId)
+        && acceptActivation(QStringLiteral("save-replay")))
         emit saveReplayRequested();
-    else if (m_screenshotRegistered && native->wParam == WPARAM(m_screenshotId))
+    else if (m_screenshotRegistered && native->wParam == WPARAM(m_screenshotId)
+             && acceptActivation(QStringLiteral("save-screenshot")))
         emit saveScreenshotRequested();
     else
         return false;

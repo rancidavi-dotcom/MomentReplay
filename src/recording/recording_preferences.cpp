@@ -23,6 +23,9 @@ RecordingPreferences::RecordingPreferences(const QString &settingsFile, QObject 
 
     m_captureAudio = m_settings.value(QStringLiteral("recording/captureAudio"), false).toBool();
     m_audioInputId = m_settings.value(QStringLiteral("recording/audioInputId")).toByteArray();
+    m_language = m_settings.value(QStringLiteral("ui/language"), QStringLiteral("en")).toString();
+    if (m_language != QStringLiteral("en") && m_language != QStringLiteral("pt_BR"))
+        m_language = QStringLiteral("en");
 }
 
 int RecordingPreferences::frameRate() const
@@ -88,6 +91,21 @@ bool RecordingPreferences::effectiveCaptureAudio() const
 QString RecordingPreferences::settingsFilePath() const
 {
     return m_settings.fileName();
+}
+
+QString RecordingPreferences::language() const
+{
+    return m_language;
+}
+
+void RecordingPreferences::setLanguage(const QString &value)
+{
+    if ((value != QStringLiteral("en") && value != QStringLiteral("pt_BR")) || value == m_language)
+        return;
+    m_language = value;
+    m_settings.setValue(QStringLiteral("ui/language"), m_language);
+    m_settings.sync();
+    emit languageChanged();
 }
 
 void RecordingPreferences::setActiveGameProfile(const QVariantMap &profile)

@@ -12,6 +12,8 @@
 #include <QAudioBufferInput>
 #include <QAudioFormat>
 #include <QTimer>
+#include <QImage>
+#include <QProcess>
 
 class InstantReplay final : public QObject {
     Q_OBJECT
@@ -26,6 +28,7 @@ public:
 
     int bufferSeconds() const;
     int bufferedSeconds() const;
+    bool hasReplayFrames() const;
     bool exporting() const;
     QString statusMessage() const;
     bool audioBuffered() const;
@@ -67,8 +70,22 @@ private:
         int frameCount = 0;
     };
 
+    struct PreparedExport {
+        QVector<Frame> frames;
+        QVector<QAudioBuffer> audioBuffers;
+        QAudioFormat audioFormat;
+        QImage firstImage;
+        QString frameDirectory;
+        QString audioWavePath;
+        QString error;
+    };
+
     static Frame encodeFrame(const QVideoFrame &frame, qint64 timestampMs);
+    static PreparedExport prepareExport(QVector<Frame> frames, QVector<AudioChunk> audioChunks,
+                                        QAudioFormat audioFormat, qint64 startTimestampMs,
+                                        qint64 endTimestampMs, QString temporaryDirectory);
     void startEncodingPendingFrame();
+    void startPreparedExport(PreparedExport prepared);
     void appendEncodedFrame(Frame frame);
     void trimBuffer();
     void sendExportFrames();
@@ -76,11 +93,14 @@ private:
     void sendExportAudio();
     void maybeFinishExport();
     void finishExport();
+    void finishExternalExport(int exitCode, QProcess::ExitStatus exitStatus);
     void failExport(const QString &message);
     void setStatusMessage(const QString &message);
 
     QElapsedTimer m_clock;
     QFutureWatcher<Frame> m_frameEncoder;
+    QFutureWatcher<PreparedExport> m_exportPreparation;
+    QFutureWatcher<QImage> m_exportFrameDecoder;
     QVector<Frame> m_frames;
     QVector<AudioChunk> m_audioChunks;
     PendingFrame m_pendingFrame;
@@ -100,14 +120,23 @@ private:
     bool m_audioInputFinished = true;
     QString m_statusMessage = QStringLiteral("Replay buffer is waiting for capture");
     QString m_outputPath;
+    QString m_exportTemporaryDirectory;
+    QString m_partialOutputPath;
+    QProcess m_exportProcess;
     QVector<Frame> m_exportFrames;
     QMediaCaptureSession m_exportSession;
     QMediaRecorder m_exportRecorder;
     QTimer m_exportPump;
+    QTimer m_audioExportPump;
     QVideoFrameInput *m_exportInput = nullptr;
     QAudioBufferInput *m_exportAudioInput = nullptr;
     QAudioFormat m_audioFormat;
     qsizetype m_audioBufferBytes = 0;
     qsizetype m_maxAudioBufferBytes = 32 * 1024 * 1024;
     QVector<QAudioBuffer> m_exportAudioBuffers;
+    QImage m_pendingExportImage;
+    bool m_decodingExportFrame = false;
+    int m_pendingExportQuality = 3;
+    int m_pendingExportFrameRate = 30;
+    qint64 m_pendingExportStartMs = 0;
 };
