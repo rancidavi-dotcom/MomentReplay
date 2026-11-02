@@ -153,7 +153,8 @@ if(BUILD_TESTING)
         src/recording/instant_replay.cpp src/recording/instant_replay.h
         src/recording/recording_preferences.cpp src/recording/recording_preferences.h
         ${MOMENT_SCREEN_SOURCE})
-    qt_add_resources(main-window-visual-test main_visual_qml PREFIX "/qt/qml/MedalLinux" FILES qml/Main.qml)
+    qt_add_resources(main-window-visual-test main_visual_qml PREFIX "/qt/qml/MedalLinux"
+        FILES qml/Main.qml qml/FriendsPage.qml qml/Localization.js)
     qt_add_resources(main-window-visual-test moment_visual_icons PREFIX "/icons" FILES packaging/io.moment.Moment.svg)
     target_include_directories(main-window-visual-test PRIVATE src)
     target_link_libraries(main-window-visual-test PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2 Qt6::Multimedia Qt6::Concurrent Qt6::Network Qt6Keychain::Qt6Keychain Qt6::Test SQLite3::SQLite3 moment-platform)

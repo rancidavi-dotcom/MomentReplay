@@ -1571,7 +1571,7 @@ ApplicationWindow {
                         }
                     }
                 }
-                // Friends and direct messages
+                // Friends and shared video clips
                 FriendsPage {
                     client: friendsClient
                     ink: window.ink

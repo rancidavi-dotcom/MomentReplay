@@ -88,6 +88,86 @@ public:
     Q_INVOKABLE void copyLastShareUrl() {}
 };
 
+class VisualFriendsClient final : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(bool busy MEMBER busy CONSTANT)
+    Q_PROPERTY(bool configured MEMBER configured CONSTANT)
+    Q_PROPERTY(bool signedIn MEMBER signedIn CONSTANT)
+    Q_PROPERTY(QString recoveryKey MEMBER recoveryKey CONSTANT)
+    Q_PROPERTY(QString statusMessage MEMBER statusMessage CONSTANT)
+    Q_PROPERTY(QString transferStatus MEMBER transferStatus CONSTANT)
+    Q_PROPERTY(int transferProgress MEMBER transferProgress CONSTANT)
+    Q_PROPERTY(QString username MEMBER username CONSTANT)
+    Q_PROPERTY(QString friendCode MEMBER friendCode CONSTANT)
+    Q_PROPERTY(QString selectedFriendId MEMBER selectedFriendId CONSTANT)
+    Q_PROPERTY(QString selectedFriendName MEMBER selectedFriendName CONSTANT)
+    Q_PROPERTY(QVariantList friends MEMBER friends CONSTANT)
+    Q_PROPERTY(QVariantList incomingRequests MEMBER incomingRequests CONSTANT)
+    Q_PROPERTY(QVariantList outgoingRequests MEMBER outgoingRequests CONSTANT)
+    Q_PROPERTY(QVariantList clips MEMBER clips CONSTANT)
+public:
+    bool busy = false;
+    bool configured = true;
+    bool signedIn = false;
+    QString recoveryKey;
+    QString statusMessage = QStringLiteral("Demo preview · Friends service is not connected");
+    QString transferStatus;
+    int transferProgress = 0;
+    QString username = QStringLiteral("Demo player");
+    QString friendCode = QStringLiteral("DEMO1234");
+    QString selectedFriendId;
+    QString selectedFriendName;
+    QVariantList friends;
+    QVariantList incomingRequests;
+    QVariantList outgoingRequests;
+    QVariantList clips;
+    Q_INVOKABLE void acceptRequest(const QString &) {}
+    Q_INVOKABLE void addFriend(const QString &) {}
+    Q_INVOKABLE void copyFriendCode() {}
+    Q_INVOKABLE void copyRecoveryKey() {}
+    Q_INVOKABLE void createAccount(const QString &) {}
+    Q_INVOKABLE void declineRequest(const QString &) {}
+    Q_INVOKABLE void dismissRecoveryKey() {}
+    Q_INVOKABLE void downloadClip(const QString &) {}
+    Q_INVOKABLE void refresh() {}
+    Q_INVOKABLE void selectFriend(const QString &) {}
+    Q_INVOKABLE void sendClip(const QUrl &) {}
+    Q_INVOKABLE void signIn(const QString &, const QString &) {}
+    Q_INVOKABLE void signOut() {}
+};
+
+class VisualUpdateChecker final : public QObject {
+    Q_OBJECT
+    Q_PROPERTY(bool autoCheck MEMBER autoCheck CONSTANT)
+    Q_PROPERTY(bool checking MEMBER checking CONSTANT)
+    Q_PROPERTY(bool updateAvailable MEMBER updateAvailable CONSTANT)
+    Q_PROPERTY(bool canInstallUpdate MEMBER canInstallUpdate CONSTANT)
+    Q_PROPERTY(bool installSupported MEMBER installSupported CONSTANT)
+    Q_PROPERTY(bool downloading MEMBER downloading CONSTANT)
+    Q_PROPERTY(int downloadPercent MEMBER downloadPercent CONSTANT)
+    Q_PROPERTY(bool restartRequired MEMBER restartRequired CONSTANT)
+    Q_PROPERTY(QString currentVersion MEMBER currentVersion CONSTANT)
+    Q_PROPERTY(QString latestVersion MEMBER latestVersion CONSTANT)
+    Q_PROPERTY(QString status MEMBER status CONSTANT)
+public:
+    bool autoCheck = true;
+    bool checking = false;
+    bool updateAvailable = false;
+    bool canInstallUpdate = false;
+    bool installSupported = false;
+    bool downloading = false;
+    int downloadPercent = 0;
+    bool restartRequired = false;
+    QString currentVersion = QStringLiteral("Demo preview");
+    QString latestVersion;
+    QString status = QStringLiteral("Demo preview · update checks disabled");
+    Q_INVOKABLE void setAutoCheck(bool) {}
+    Q_INVOKABLE void checkNow() {}
+    Q_INVOKABLE void openReleasePage() {}
+    Q_INVOKABLE void downloadAndInstall() {}
+    Q_INVOKABLE void restartToApply() {}
+};
+
 class MainWindowVisualTest final : public QObject {
     Q_OBJECT
 private:
@@ -164,6 +244,8 @@ private slots:
         VisualTray tray;
         VisualDiscordPresence discordPresence;
         VisualDriveShare driveShare;
+        VisualFriendsClient friendsClient;
+        VisualUpdateChecker updateChecker;
         QQmlApplicationEngine engine;
         QStringList warnings;
         connect(&engine, &QQmlEngine::warnings, this, [&warnings](const QList<QQmlError> &errors) {
@@ -177,6 +259,8 @@ private slots:
         engine.rootContext()->setContextProperty("discordPresence", &discordPresence);
         engine.rootContext()->setContextProperty("videoEditor", &videoEditor);
         engine.rootContext()->setContextProperty("driveShare", &driveShare);
+        engine.rootContext()->setContextProperty("friendsClient", &friendsClient);
+        engine.rootContext()->setContextProperty("updateChecker", &updateChecker);
         engine.rootContext()->setContextProperty("globalShortcuts", &shortcuts);
         engine.rootContext()->setContextProperty("trayController", &tray);
         QQmlComponent component(&engine, QUrl("qrc:/qt/qml/MedalLinux/qml/Main.qml"));
