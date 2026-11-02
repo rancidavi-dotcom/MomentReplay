@@ -8,9 +8,12 @@ namespace MomentEncoding {
 inline QSize replayFrameSize(const QSize &source)
 {
     constexpr QSize maximum(1920, 1080);
-    if (source.width() <= maximum.width() && source.height() <= maximum.height())
-        return source;
-    return source.scaled(maximum, Qt::KeepAspectRatio);
+    QSize size(source);
+    if (size.width() > maximum.width() || size.height() > maximum.height())
+        size = source.scaled(maximum, Qt::KeepAspectRatio);
+    // H.264 with the yuv420p pixel format only accepts frames whose width and
+    // height are divisible by 2; odd dimensions make libx264 fail the encode.
+    return QSize(((size.width() + 1) / 2) * 2, ((size.height() + 1) / 2) * 2);
 }
 
 inline int videoBitRate(int quality, const QSize &size)
