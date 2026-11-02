@@ -138,7 +138,9 @@ int main(int argc, char *argv[])
     CapturePopup capturePopup(&engine);
     CapturePopup socialPopup(&engine, nullptr, QStringLiteral("social"), 112);
     FriendsClient friendsClient(dataDirectory + QStringLiteral("/settings.ini"),
-                                QString::fromUtf8(MOMENT_FRIENDS_API_URL));
+                                QString::fromUtf8(MOMENT_FRIENDS_API_URL), nullptr, !smokeTest);
+    if (friendsPreview)
+        friendsClient.preparePreviewData();
     QObject::connect(&friendsClient, &FriendsClient::incomingNotification, &app,
                      [&socialPopup](const QString &title, const QString &message, bool warning) {
         socialPopup.show(title, message, warning);

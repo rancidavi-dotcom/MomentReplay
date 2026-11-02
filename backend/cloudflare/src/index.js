@@ -37,6 +37,9 @@ function error(message, status = 400, code = "bad_request") {
 }
 
 function withCors(response) {
+  // A WebSocket upgrade response must be returned untouched: wrapping a 101
+  // Response drops the Cloudflare-specific webSocket endpoint.
+  if (response.status === 101) return response;
   const headers = new Headers(response.headers);
   headers.set("access-control-allow-origin", "*");
   headers.set("access-control-allow-methods", "GET,POST,PUT,DELETE,OPTIONS");
@@ -232,28 +235,14 @@ async function handleApi(request, env, path) {
     if (recipient.id === user.id) throw new HttpError(400, "You cannot add yourself.");
     if (await areFriends(env, user.id, recipient.id))
       throw new HttpError(409, "You are already friends.", "already_friends");
-    const pending = await env.DB.prepare(
-      "SELECT id, sender_id, recipient_id FROM friend_requests WHERE status = 'pending' AND ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)) LIMIT 1",
-    ).bind(user.id, recipient.id, recipient.id, user.id).first();
-    if (pending) {
-      if (pending.sender_id === recipient.id && pending.recipient_id === user.id) {
-        const [low, high] = pairIds(user.id, recipient.id);
-        await env.DB.batch([
-          env.DB.prepare("UPDATE friend_requests SET status = 'accepted', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?")
-            .bind(pending.id),
-          env.DB.prepare("INSERT OR IGNORE INTO friendships (user_low, user_high) VALUES (?, ?)").bind(low, high),
-        ]);
-        await notifyUser(env, recipient.id, { type: "friend.accepted", friend: publicUser(user) });
-        return json({ status: "accepted", friend: publicUser(recipient) });
-      }
-      return json({ status: "pending", requestId: pending.id, friend: publicUser(recipient) }, 200);
-    }
-    const requestId = crypto.randomUUID();
-    await env.DB.prepare(
-      "INSERT INTO friend_requests (id, sender_id, recipient_id) VALUES (?, ?, ?)",
-    ).bind(requestId, user.id, recipient.id).run();
-    await notifyUser(env, recipient.id, { type: "friend.request", requestId, user: publicUser(user) });
-    return json({ status: "pending", requestId, friend: publicUser(recipient) }, 201);
+    const [low, high] = pairIds(user.id, recipient.id);
+    await env.DB.batch([
+      env.DB.prepare("UPDATE friend_requests SET status = 'accepted', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE status = 'pending' AND ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?))")
+        .bind(user.id, recipient.id, recipient.id, user.id),
+      env.DB.prepare("INSERT OR IGNORE INTO friendships (user_low, user_high) VALUES (?, ?)").bind(low, high),
+    ]);
+    await notifyUser(env, recipient.id, { type: "friend.accepted", friend: publicUser(user) });
+    return json({ status: "accepted", friend: publicUser(recipient) }, 201);
   }
 
   if (method === "GET" && path === "/friends") {
@@ -556,11 +545,13 @@ export class MomentRealtimeHub {
 
   async fetch(request) {
     const url = new URL(request.url);
-    if (url.pathname === "/presence") return json({ online: this.state.getWebSockets().length > 0 });
+    if (url.pathname === "/presence")
+      return json({ online: this.state.getWebSockets().some((socket) => socket.readyState === WebSocket.OPEN) });
     if (url.pathname === "/deliver" && request.method === "POST") {
       const message = await request.json();
       const encoded = JSON.stringify(message);
       for (const socket of this.state.getWebSockets()) {
+        if (socket.readyState !== WebSocket.OPEN) continue;
         try { socket.send(encoded); } catch { /* stale sockets close on the next event */ }
       }
       return new Response(null, { status: 204 });
@@ -602,5 +593,13 @@ export class MomentRealtimeHub {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ type: "signal", from: senderId, signalType: message.type, payload: message.payload ?? null }),
     });
+  }
+
+  webSocketClose(socket) {
+    try { socket.close(); } catch { /* already closed by the peer */ }
+  }
+
+  webSocketError(socket) {
+    try { socket.close(1011, "Realtime connection failed"); } catch { /* already closed */ }
   }
 }

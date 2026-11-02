@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(medal_linux VERSION 0.1.1 LANGUAGES CXX)
+project(medal_linux VERSION 0.1.2 LANGUAGES CXX)
 
 set(MOMENT_DISCORD_APPLICATION_ID "1565077771309555864" CACHE STRING "Public Discord application ID for Rich Presence")
 set(MOMENT_GOOGLE_OAUTH_CLIENT_ID "" CACHE STRING "Google OAuth desktop client ID for Drive sharing")

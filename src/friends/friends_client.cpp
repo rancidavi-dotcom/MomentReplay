@@ -82,11 +82,13 @@ struct FriendsClient::ClipDownload {
 };
 
 FriendsClient::FriendsClient(const QString &settingsFile, const QString &apiBaseUrl,
-                             QObject *parent)
+                             QObject *parent, bool restoreSavedAccount)
     : QObject(parent), m_settings(settingsFile, QSettings::IniFormat),
       m_apiBaseUrl(QUrl(apiBaseUrl))
 {
     connect(&m_socket, &QWebSocket::connected, this, [this] {
+        m_realtimeRetryTimer.stop();
+        m_realtimeRetryDelayMs = 2000;
         setStatus(QStringLiteral("Moment Friends connected"));
         refreshFriends();
         refreshInbox();
@@ -94,9 +96,10 @@ FriendsClient::FriendsClient(const QString &settingsFile, const QString &apiBase
             refreshClips();
     });
     connect(&m_socket, &QWebSocket::disconnected, this, [this] {
-        if (m_signedIn) {
+        if (m_signedIn && !m_realtimeRetryTimer.isActive()) {
             setStatus(QStringLiteral("Moment Friends disconnected; reconnecting…"));
-            QTimer::singleShot(2500, this, &FriendsClient::openRealtime);
+            m_realtimeRetryTimer.start(m_realtimeRetryDelayMs);
+            m_realtimeRetryDelayMs = qMin(m_realtimeRetryDelayMs * 2, 30000);
         }
     });
     connect(&m_socket, &QWebSocket::textMessageReceived,
@@ -105,6 +108,8 @@ FriendsClient::FriendsClient(const QString &settingsFile, const QString &apiBase
         if (m_signedIn)
             setStatus(QStringLiteral("Moment Friends connection failed: %1").arg(m_socket.errorString()));
     });
+    m_realtimeRetryTimer.setSingleShot(true);
+    connect(&m_realtimeRetryTimer, &QTimer::timeout, this, &FriendsClient::openRealtime);
     m_inboxTimer.setInterval(60000);
     connect(&m_inboxTimer, &QTimer::timeout, this, [this] {
         if (m_signedIn) {
@@ -113,10 +118,36 @@ FriendsClient::FriendsClient(const QString &settingsFile, const QString &apiBase
         }
     });
     m_inboxTimer.start();
-    if (configured())
+    if (configured() && restoreSavedAccount)
         loadSavedAccount();
-    else
+    else if (!configured())
         setStatus(QStringLiteral("Moment Friends service is not configured in this build."));
+}
+
+void FriendsClient::preparePreviewData()
+{
+    m_signedIn = true;
+    m_username = QStringLiteral("Moment player");
+    m_userId = QStringLiteral("preview-local-user");
+    m_friendCode = QStringLiteral("M9Q3X7Z2");
+    m_selectedFriendId = QStringLiteral("preview-friend");
+    m_selectedFriendName = QStringLiteral("RivalPlayer");
+    QVariantMap friendItem;
+    friendItem.insert(QStringLiteral("id"), m_selectedFriendId);
+    friendItem.insert(QStringLiteral("username"), m_selectedFriendName);
+    friendItem.insert(QStringLiteral("online"), true);
+    m_friends = {friendItem};
+    QVariantMap clipItem;
+    clipItem.insert(QStringLiteral("id"), QStringLiteral("preview-shared-video"));
+    clipItem.insert(QStringLiteral("sender_id"), m_selectedFriendId);
+    clipItem.insert(QStringLiteral("recipient_id"), m_userId);
+    clipItem.insert(QStringLiteral("clip_name"), QStringLiteral("match-highlight.mp4"));
+    clipItem.insert(QStringLiteral("clip_size"), 4 * 1024 * 1024);
+    clipItem.insert(QStringLiteral("delivery_status"), QStringLiteral("available"));
+    clipItem.insert(QStringLiteral("expires_at"), QStringLiteral("today · 18:45"));
+    m_clips = {clipItem};
+    setStatus(QStringLiteral("Preview data · no real account or video is used"));
+    emit stateChanged();
 }
 
 bool FriendsClient::configured() const
@@ -143,6 +174,7 @@ QUrl FriendsClient::apiUrl(const QString &path) const
 
 bool FriendsClient::busy() const { return m_busy; }
 bool FriendsClient::signedIn() const { return m_signedIn; }
+bool FriendsClient::restoringSession() const { return m_restoringSession; }
 QString FriendsClient::username() const { return m_username; }
 QString FriendsClient::friendCode() const { return m_friendCode; }
 QString FriendsClient::recoveryKey() const { return m_recoveryKey; }
@@ -224,6 +256,7 @@ void FriendsClient::setStatus(const QString &message)
 
 void FriendsClient::createAccount(const QString &username)
 {
+    m_restoringSession = false;
     const QString normalized = username.trimmed();
     if (normalized.size() < 3 || normalized.size() > 24) {
         setStatus(QStringLiteral("Choose a username between 3 and 24 characters."));
@@ -245,6 +278,7 @@ void FriendsClient::createAccount(const QString &username)
 
 void FriendsClient::signIn(const QString &username, const QString &recoveryKey)
 {
+    m_restoringSession = false;
     const QString normalized = username.trimmed();
     const QString key = recoveryKey.trimmed().toLower();
     if (normalized.isEmpty() || key.size() != 64) {
@@ -297,12 +331,19 @@ void FriendsClient::finishSignIn(const QString &username, const QString &authKey
 
 void FriendsClient::loadSavedAccount()
 {
+    m_restoringSession = true;
+    emit stateChanged();
     auto *job = new QKeychain::ReadPasswordJob(kKeychainService, this);
     job->setKey(kKeychainKey);
     job->setInsecureFallback(false);
     connect(job, &QKeychain::Job::finished, this, [this, job] {
         const QString savedUsername = m_settings.value(QStringLiteral("friends/username")).toString();
         if (job->error() || job->textData().isEmpty() || savedUsername.isEmpty()) {
+            m_restoringSession = false;
+            if (job->error())
+                setStatus(QStringLiteral("Could not access the saved Moment Friends session: %1")
+                              .arg(job->errorString()));
+            emit stateChanged();
             job->deleteLater();
             return;
         }
@@ -311,9 +352,18 @@ void FriendsClient::loadSavedAccount()
         job->deleteLater();
         request("GET", QStringLiteral("/me"), {}, true, [this](bool ok, const QJsonObject &response) {
             if (!ok) {
-                m_authKey.clear();
-                m_username.clear();
-                setStatus(apiError(response, QStringLiteral("Saved Moment Friends login is no longer valid.")));
+                m_restoringSession = false;
+                const QJsonObject error = response.value(QStringLiteral("error")).toObject();
+                const bool invalidCredential = error.value(QStringLiteral("code")).toString()
+                    == QStringLiteral("unauthorized");
+                if (invalidCredential) {
+                    m_authKey.clear();
+                    m_username.clear();
+                    setStatus(apiError(response, QStringLiteral("Saved Moment Friends login is no longer valid.")));
+                } else {
+                    setStatus(QStringLiteral("Could not reconnect to Moment Friends. Your saved session is kept; try again when online."));
+                }
+                emit stateChanged();
                 return;
             }
             const QJsonObject user = response.value(QStringLiteral("user")).toObject();
@@ -321,6 +371,7 @@ void FriendsClient::loadSavedAccount()
             m_userId = user.value(QStringLiteral("id")).toString();
             m_friendCode = user.value(QStringLiteral("friendCode")).toString();
             m_signedIn = true;
+            m_restoringSession = false;
             setStatus(QStringLiteral("Moment Friends signed in"));
             emit stateChanged();
             refreshFriends();
@@ -333,6 +384,8 @@ void FriendsClient::loadSavedAccount()
 
 void FriendsClient::signOut()
 {
+    m_realtimeRetryTimer.stop();
+    m_restoringSession = false;
     m_socket.close();
     m_authKey.clear();
     m_username.clear();
@@ -397,9 +450,7 @@ void FriendsClient::addFriend(const QString &friendCode)
     const QString code = friendCode.trimmed().toUpper();
     request("POST", QStringLiteral("/friends/requests"),
             {{QStringLiteral("friendCode"), code}}, true, [this](bool ok, const QJsonObject &response) {
-        setStatus(ok ? (response.value(QStringLiteral("status")).toString() == QStringLiteral("accepted")
-                         ? QStringLiteral("Friend request accepted")
-                         : QStringLiteral("Friend request sent"))
+        setStatus(ok ? QStringLiteral("You are now friends")
                       : apiError(response, QStringLiteral("Could not add friend.")));
         if (ok)
             refreshFriends();
@@ -443,6 +494,19 @@ void FriendsClient::removeFriend(const QString &friendId)
             refreshFriends();
             emit stateChanged();
         }
+    });
+}
+
+void FriendsClient::deleteClip(const QString &clipId)
+{
+    if (!m_signedIn || clipId.isEmpty())
+        return;
+    request("DELETE", QStringLiteral("/clips/%1").arg(clipId), {}, true,
+            [this](bool ok, const QJsonObject &response) {
+        setStatus(ok ? QStringLiteral("Shared video deleted for both friends")
+                     : apiError(response, QStringLiteral("Could not delete shared video.")));
+        if (ok)
+            refreshClips();
     });
 }
 

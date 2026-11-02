@@ -12,6 +12,8 @@ Item {
     property color line: "#2a343f"
     property color accent: "#b5ec72"
     property var translate: function(text) { return text }
+    property string pendingDeleteClipId: ""
+    property string pendingDeleteClipName: ""
 
     function tr(text) { return translate(text) }
 
@@ -21,6 +23,33 @@ Item {
         fileMode: FileDialog.OpenFile
         nameFilters: ["Videos (*.mp4 *.webm *.mov *.mkv)", "All files (*)"]
         onAccepted: root.client.sendClip(selectedFile)
+    }
+
+    Dialog {
+        id: deleteClipDialog
+        title: root.tr("Delete shared video?")
+        modal: true
+        anchors.centerIn: parent
+        width: Math.min(root.width - 30, 420)
+        contentItem: Label {
+            text: root.tr("Delete %1 from both friends' chat? This cannot be undone.").arg(root.pendingDeleteClipName)
+            color: root.ink
+            wrapMode: Text.Wrap
+        }
+        footer: RowLayout {
+            spacing: 8
+            Item { Layout.fillWidth: true }
+            Button { text: root.tr("Cancel"); onClicked: deleteClipDialog.close() }
+            ActionButton {
+                text: root.tr("Delete video")
+                onClicked: {
+                    root.client.deleteClip(root.pendingDeleteClipId)
+                    root.pendingDeleteClipId = ""
+                    root.pendingDeleteClipName = ""
+                    deleteClipDialog.close()
+                }
+            }
+        }
     }
 
     component Card: Rectangle {
@@ -115,7 +144,21 @@ Item {
         }
 
         Card {
+            visible: root.client && root.client.configured && root.client.restoringSession
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            ColumnLayout {
+                anchors.centerIn: parent
+                width: Math.min(parent.width - 60, 420)
+                spacing: 12
+                Label { Layout.fillWidth: true; text: root.tr("Restoring your Moment account…"); color: root.ink; font.pixelSize: 20; font.bold: true; horizontalAlignment: Text.AlignHCenter }
+                Label { Layout.fillWidth: true; text: root.tr("Checking this device's saved sign-in. You won't need to enter your recovery key again here."); color: root.muted; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter }
+            }
+        }
+
+        Card {
             visible: root.client && root.client.configured && !root.client.signedIn
+                && !root.client.restoringSession
             Layout.fillWidth: true
             Layout.fillHeight: true
             ColumnLayout {
@@ -257,6 +300,17 @@ Item {
                                         text: root.tr("Download")
                                         implicitHeight: 29
                                         onClicked: root.client.downloadClip(modelData.id)
+                                    }
+                                    ActionButton {
+                                        text: root.tr("Delete")
+                                        implicitHeight: 29
+                                        ToolTip.visible: hovered
+                                        ToolTip.text: root.tr("Remove this shared video for both friends")
+                                        onClicked: {
+                                            root.pendingDeleteClipId = modelData.id
+                                            root.pendingDeleteClipName = modelData.clip_name
+                                            deleteClipDialog.open()
+                                        }
                                     }
                                 }
                             }

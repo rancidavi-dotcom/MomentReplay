@@ -20,6 +20,7 @@ class FriendsClient final : public QObject {
     Q_PROPERTY(bool configured READ configured CONSTANT)
     Q_PROPERTY(bool busy READ busy NOTIFY stateChanged)
     Q_PROPERTY(bool signedIn READ signedIn NOTIFY stateChanged)
+    Q_PROPERTY(bool restoringSession READ restoringSession NOTIFY stateChanged)
     Q_PROPERTY(QString username READ username NOTIFY stateChanged)
     Q_PROPERTY(QString friendCode READ friendCode NOTIFY stateChanged)
     Q_PROPERTY(QString recoveryKey READ recoveryKey NOTIFY stateChanged)
@@ -35,11 +36,12 @@ class FriendsClient final : public QObject {
 
 public:
     explicit FriendsClient(const QString &settingsFile, const QString &apiBaseUrl,
-                           QObject *parent = nullptr);
+                           QObject *parent = nullptr, bool restoreSavedAccount = true);
 
     bool configured() const;
     bool busy() const;
     bool signedIn() const;
+    bool restoringSession() const;
     QString username() const;
     QString friendCode() const;
     QString recoveryKey() const;
@@ -64,9 +66,11 @@ public:
     Q_INVOKABLE void selectFriend(const QString &friendId);
     Q_INVOKABLE void sendClip(const QUrl &fileUrl);
     Q_INVOKABLE void downloadClip(const QString &clipId);
+    Q_INVOKABLE void deleteClip(const QString &clipId);
     Q_INVOKABLE void copyRecoveryKey();
     Q_INVOKABLE void copyFriendCode();
     Q_INVOKABLE void dismissRecoveryKey();
+    void preparePreviewData();
 
 signals:
     void stateChanged();
@@ -101,6 +105,7 @@ private:
     QNetworkAccessManager m_network;
     QWebSocket m_socket;
     QTimer m_inboxTimer;
+    QTimer m_realtimeRetryTimer;
     QSettings m_settings;
     QUrl m_apiBaseUrl;
     QString m_authKey;
@@ -121,6 +126,8 @@ private:
     int m_transferProgress = 0;
     QString m_transferStatus;
     int m_pendingRequests = 0;
+    int m_realtimeRetryDelayMs = 2000;
     bool m_busy = false;
     bool m_signedIn = false;
+    bool m_restoringSession = false;
 };
